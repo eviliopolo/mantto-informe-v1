@@ -18,6 +18,8 @@ from src.generadores.seccion_9_riesgos import GeneradorSeccion9
 from src.generadores.seccion_10_sgsst import GeneradorSeccion10
 from src.generadores.seccion_11_valores import GeneradorSeccion11
 from src.generadores.seccion_12_conclusiones import GeneradorSeccion12
+from src.generadores.seccion_13_anexos import GeneradorSeccion13
+from src.generadores.seccion_14_control_cambios import GeneradorSeccion14
 
 # Importar otros generadores conforme se vayan creando
 # ...
@@ -61,6 +63,8 @@ def generar_informe(anio: int, mes: int, version: int = 1):
         GeneradorSeccion10(anio, mes),
         GeneradorSeccion11(anio, mes),
         GeneradorSeccion12(anio, mes),
+        GeneradorSeccion13(anio, mes),
+        GeneradorSeccion14(anio, mes),
         # Agregar más generadores conforme se desarrollen
         # ...
     ]
