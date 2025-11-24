@@ -67,6 +67,16 @@ class GeneradorSeccion8(GeneradorSeccion):
                     self.consolidado = data.get("consolidado", [])
                     self.compras_bolsa = data.get("compras_bolsa", [])
                     self.variaciones = data.get("variaciones", [])
+                
+                # Calcular porcentajes y formatear valores para ejecución mensual
+                self._procesar_ejecucion_mensual()
+                
+                # Calcular porcentajes y formatear valores para consolidado
+                self._procesar_consolidado()
+                
+                # Formatear valores para compras bolsa
+                self._procesar_compras_bolsa()
+                
                 datos_cargados = True
                 print(f"[INFO] Datos cargados desde JSON: {archivo_json}")
             except Exception as e:
@@ -84,9 +94,45 @@ class GeneradorSeccion8(GeneradorSeccion):
         # Adaptar según estructura real del CSV
         if 'categoria' in df.columns:
             self.ejecucion_mensual = df[['categoria', 'presupuesto', 'ejecutado']].to_dict('records')
+            # Calcular porcentajes y formatear valores
+            self._procesar_ejecucion_mensual()
         
         if 'mes' in df.columns:
             self.consolidado = df[['mes', 'presupuesto_mes', 'ejecutado_mes']].to_dict('records')
+            # Calcular porcentajes y formatear valores
+            self._procesar_consolidado()
+    
+    def _procesar_ejecucion_mensual(self) -> None:
+        """Calcula porcentajes y formatea valores para ejecución mensual"""
+        for item in self.ejecucion_mensual:
+            presupuesto = item.get("presupuesto", 0)
+            ejecutado = item.get("ejecutado", 0)
+            if presupuesto > 0:
+                item["porcentaje_ejecucion"] = round((ejecutado / presupuesto) * 100, 2)
+            else:
+                item["porcentaje_ejecucion"] = 0.0
+            # Formatear valores monetarios
+            item["presupuesto_formato"] = formato_moneda_cop(presupuesto)
+            item["ejecutado_formato"] = formato_moneda_cop(ejecutado)
+    
+    def _procesar_consolidado(self) -> None:
+        """Calcula porcentajes y formatea valores para consolidado"""
+        for item in self.consolidado:
+            presupuesto = item.get("presupuesto_mes", 0)
+            ejecutado = item.get("ejecutado_mes", 0)
+            if presupuesto > 0:
+                item["porcentaje_ejecucion"] = round((ejecutado / presupuesto) * 100, 2)
+            else:
+                item["porcentaje_ejecucion"] = 0.0
+            # Formatear valores monetarios
+            item["presupuesto_mes_formato"] = formato_moneda_cop(presupuesto)
+            item["ejecutado_mes_formato"] = formato_moneda_cop(ejecutado)
+    
+    def _procesar_compras_bolsa(self) -> None:
+        """Formatea valores monetarios para compras bolsa"""
+        for item in self.compras_bolsa:
+            item["valor_unitario_formato"] = formato_moneda_cop(item.get("valor_unitario", 0))
+            item["valor_total_formato"] = formato_moneda_cop(item.get("valor_total", 0))
     
     def _generar_datos_dummy(self) -> None:
         """Genera datos dummy para pruebas cuando no hay fuentes externas"""
@@ -277,6 +323,15 @@ class GeneradorSeccion8(GeneradorSeccion):
             
             # Totales calculados
             **totales,
+            
+            # Formatear totales para el template
+            "total_presupuesto_formato": formato_moneda_cop(totales["total_presupuesto"]),
+            "total_ejecutado_formato": formato_moneda_cop(totales["total_ejecutado"]),
+            "total_compras_bolsa_formato": formato_moneda_cop(totales["total_compras_bolsa"]),
+            
+            # Variables adicionales
+            "periodo": f"{config.MESES[self.mes]} {self.anio}",
+            "contrato_numero": "SCJ-1809-2024",
             
             # Placeholder para gráfico (si se genera)
             "grafico_ejecucion_img": self.grafico_ejecucion_img,
