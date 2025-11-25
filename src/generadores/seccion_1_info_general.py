@@ -118,7 +118,8 @@ class GeneradorSeccion1(GeneradorSeccion):
             # Texto introductorio
             "texto_intro": texto_intro,
             
-            # TABLA 1: Información General del Contrato
+            # TABLA 1: Información General del Contrato (formato lista para docxtpl)
+            "tabla_1_filas": self._formatear_tabla_1(),
             "tabla_1_info_general": {
                 "nit": config.CONTRATO["nit_entidad"],
                 "razon_social": config.CONTRATO["razon_social"],
@@ -139,6 +140,11 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "vigencia_poliza_acta": f"{self._formatear_fecha(config.CONTRATO['vigencia_poliza_acta_inicio'])} {self._formatear_fecha(config.CONTRATO['vigencia_poliza_acta_fin'])}",
             },
             
+            # Variables para textos de anexos (opcionales)
+            "ruta_acta_inicio": self._obtener_ruta_acta_inicio(),
+            "numero_adicion": self._obtener_numero_adicion(),
+            "ruta_poliza": self._obtener_ruta_poliza(),
+            
             # 1.1 Objeto del contrato (FIJO)
             "objeto_contrato": config.CONTRATO["objeto_corto"],
             
@@ -148,28 +154,43 @@ class GeneradorSeccion1(GeneradorSeccion):
             # 1.3 Descripción infraestructura (FIJO + TABLAS)
             "descripcion_infraestructura": self._cargar_contenido_fijo("infraestructura.txt"),
             "subsistemas": config.SUBSISTEMAS,
-            "tabla_componentes": self._cargar_tabla_componentes(),
-            "tabla_centros_monitoreo": self._cargar_tabla_centros_monitoreo(),
-            "tabla_forma_pago": self._cargar_tabla_forma_pago(),
+            "componentes": self._cargar_tabla_componentes(),  # Renombrado para consistencia
+            "centros": self._cargar_tabla_centros_monitoreo(),  # Renombrado para consistencia
+            "forma_pago": self._cargar_tabla_forma_pago(),  # Renombrado para consistencia
+            "tabla_componentes": self._cargar_tabla_componentes(),  # Mantener compatibilidad
+            "tabla_centros_monitoreo": self._cargar_tabla_centros_monitoreo(),  # Mantener compatibilidad
+            "tabla_forma_pago": self._cargar_tabla_forma_pago(),  # Mantener compatibilidad
+            "nota_infraestructura": self._obtener_nota_infraestructura(),
             
             # 1.4 Glosario (FIJO)
             "glosario": self._cargar_glosario(),
+            "glosario_tablas": self._formatear_glosario_tablas(),
             
-            # 1.5 Obligaciones (FIJO)
+            # 1.5 Obligaciones (FIJO texto + DINÁMICO tablas)
             "obligaciones_generales": self._cargar_contenido_fijo("obligaciones_generales.txt"),
             "obligaciones_especificas": self._cargar_contenido_fijo("obligaciones_especificas.txt"),
             "obligaciones_ambientales": self._cargar_contenido_fijo("obligaciones_ambientales.txt"),
             "obligaciones_anexos": self._cargar_contenido_fijo("obligaciones_anexos.txt"),
+            
+            # Tablas de obligaciones (DINÁMICAS - con cumplimiento)
+            "tabla_obligaciones_generales": self._formatear_obligaciones_generales(),
+            "tabla_obligaciones_especificas": self._formatear_obligaciones_especificas(),
+            "tabla_obligaciones_ambientales": self._formatear_obligaciones_ambientales(),
+            "tabla_obligaciones_anexos": self._formatear_obligaciones_anexos(),
             
             # 1.6 Comunicados (EXTRACCIÓN)
             "comunicados_emitidos": self.comunicados_emitidos,
             "comunicados_recibidos": self.comunicados_recibidos,
             "total_comunicados_emitidos": len(self.comunicados_emitidos),
             "total_comunicados_recibidos": len(self.comunicados_recibidos),
+            "tabla_comunicados_emitidos": self._formatear_comunicados_emitidos(),
+            "tabla_comunicados_recibidos": self._formatear_comunicados_recibidos(),
             
             # 1.7 - 1.8 Personal (FIJO estructura + EXTRACCIÓN datos)
             "personal_minimo": self.personal_minimo,
             "personal_apoyo": self.personal_apoyo,
+            "tabla_personal_minimo": self._formatear_personal_minimo(),
+            "tabla_personal_apoyo": self._formatear_personal_apoyo(),
         }
     
     def _cargar_glosario(self) -> List[Dict[str, str]]:
@@ -208,6 +229,7 @@ class GeneradorSeccion1(GeneradorSeccion):
         # Datos según el informe oficial de Septiembre 2025
         return [
             {
+                "numero": 1,
                 "sistema": "CIUDADANA",
                 "ubicaciones": 4451,
                 "puntos_camara": 4451,
@@ -215,6 +237,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "visualizadas_localmente": 0
             },
             {
+                "numero": 2,
                 "sistema": "COLEGIOS",
                 "ubicaciones": 98,
                 "puntos_camara": 235,
@@ -222,6 +245,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "visualizadas_localmente": 0
             },
             {
+                "numero": 3,
                 "sistema": "TRANSMILENIO",
                 "ubicaciones": 71,
                 "puntos_camara": 164,
@@ -229,6 +253,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "visualizadas_localmente": 0
             },
             {
+                "numero": 4,
                 "sistema": "CAI",
                 "ubicaciones": 157,
                 "puntos_camara": 510,
@@ -236,6 +261,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "visualizadas_localmente": 421
             },
             {
+                "numero": 5,
                 "sistema": "ESTADIO EL CAMPIN",
                 "ubicaciones": 1,
                 "puntos_camara": 58,
@@ -243,6 +269,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "visualizadas_localmente": 58
             },
             {
+                "numero": 6,
                 "sistema": "CTP",
                 "ubicaciones": 1,
                 "puntos_camara": 104,
@@ -250,6 +277,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "visualizadas_localmente": 104
             },
             {
+                "numero": 7,
                 "sistema": "ESTACIONES DE POLICÍA",
                 "ubicaciones": 24,
                 "puntos_camara": 302,
@@ -257,6 +285,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "visualizadas_localmente": 302
             },
             {
+                "numero": 8,
                 "sistema": "TOTAL",
                 "ubicaciones": 4803,
                 "puntos_camara": 5824,
@@ -300,5 +329,121 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "tipo_servicio": "Por Demanda"
             }
         ]
+    
+    def _formatear_tabla_1(self) -> List[Dict[str, str]]:
+        """Formatea la tabla 1 como lista de filas (Campo | Valor)"""
+        return [
+            {"campo": "NIT", "valor": config.CONTRATO["nit_entidad"]},
+            {"campo": "RAZÓN SOCIAL", "valor": config.CONTRATO["razon_social"]},
+            {"campo": "CIUDAD", "valor": config.CONTRATO["ciudad"]},
+            {"campo": "DIRECCIÓN", "valor": config.CONTRATO["direccion"]},
+            {"campo": "TELÉFONO", "valor": config.CONTRATO["telefono"]},
+            {"campo": "NÚMERO DE CONTRATO", "valor": config.CONTRATO["numero"]},
+            {"campo": "FECHA DE INICIO", "valor": self._formatear_fecha(config.CONTRATO["fecha_inicio"])},
+            {"campo": "PLAZO DE EJECUCIÓN", "valor": config.CONTRATO["plazo_ejecucion"]},
+            {"campo": "FECHA DE TERMINACIÓN", "valor": self._formatear_fecha(config.CONTRATO["fecha_fin"])},
+            {"campo": "VALOR INICIAL", "valor": formato_moneda_cop(config.CONTRATO["valor_inicial"])},
+            {"campo": "ADICIÓN N° 01", "valor": formato_moneda_cop(config.CONTRATO["adicion_1"])},
+            {"campo": "VALOR TOTAL", "valor": formato_moneda_cop(config.CONTRATO["valor_total"])},
+            {"campo": "OBJETO", "valor": config.CONTRATO["objeto"]},
+            {"campo": "FECHA FIRMA ACTA DE INICIO", "valor": self._formatear_fecha(config.CONTRATO["fecha_inicio"])},
+            {"campo": "FECHA DE SUSCRIPCIÓN", "valor": self._formatear_fecha(config.CONTRATO["fecha_suscripcion"])},
+            {"campo": "VIGENCIA PÓLIZA INICIAL", "valor": f"{self._formatear_fecha(config.CONTRATO['vigencia_poliza_inicial_inicio'])} - {self._formatear_fecha(config.CONTRATO['vigencia_poliza_inicial_fin'])}"},
+            {"campo": "VIGENCIA PÓLIZA ACTA DE INICIO", "valor": f"{self._formatear_fecha(config.CONTRATO['vigencia_poliza_acta_inicio'])} - {self._formatear_fecha(config.CONTRATO['vigencia_poliza_acta_fin'])}"},
+        ]
+    
+    def _formatear_comunicados_emitidos(self) -> List[Dict]:
+        """Formatea comunicados emitidos para tabla (ÍTEM, FECHA, CONSECUTIVO ETB, DESCRIPCIÓN)"""
+        return [
+            {
+                "item": i+1,
+                "fecha": com.get("fecha", ""),
+                "consecutivo": com.get("numero", ""),
+                "descripcion": com.get("asunto", "")
+            }
+            for i, com in enumerate(self.comunicados_emitidos)
+        ]
+    
+    def _formatear_comunicados_recibidos(self) -> List[Dict]:
+        """Formatea comunicados recibidos para tabla (ÍTEM, FECHA, CONSECUTIVO ETB, DESCRIPCIÓN)"""
+        return [
+            {
+                "item": i+1,
+                "fecha": com.get("fecha", ""),
+                "consecutivo": com.get("numero", ""),
+                "descripcion": com.get("asunto", "")
+            }
+            for i, com in enumerate(self.comunicados_recibidos)
+        ]
+    
+    def _formatear_personal_minimo(self) -> List[Dict]:
+        """Formatea personal mínimo para tabla"""
+        return [
+            {
+                "cargo": p.get("cargo", ""),
+                "cantidad": p.get("cantidad", 0),
+                "nombre": p.get("nombre", "Por definir")
+            }
+            for p in self.personal_minimo
+        ]
+    
+    def _formatear_personal_apoyo(self) -> List[Dict]:
+        """Formatea personal de apoyo para tabla"""
+        return [
+            {
+                "cargo": p.get("cargo", ""),
+                "cantidad": p.get("cantidad", 0),
+                "nombre": p.get("nombre", "Por definir")
+            }
+            for p in self.personal_apoyo
+        ]
+    
+    def _formatear_glosario_tablas(self) -> List[Dict]:
+        """Formatea glosario para múltiples tablas (se divide en grupos)"""
+        glosario = self._cargar_glosario()
+        # Retornar lista completa - el template dividirá en tablas si es necesario
+        return glosario
+    
+    def _formatear_obligaciones_generales(self) -> List[Dict]:
+        """Formatea obligaciones generales para tabla con cumplimiento"""
+        # TODO: Cargar desde fuente de datos real (CSV/JSON/Excel)
+        # Por ahora retorna lista vacía - se debe cargar desde fuente externa
+        return []
+    
+    def _formatear_obligaciones_especificas(self) -> List[Dict]:
+        """Formatea obligaciones específicas para tabla con cumplimiento"""
+        # TODO: Cargar desde fuente de datos real
+        return []
+    
+    def _formatear_obligaciones_ambientales(self) -> List[Dict]:
+        """Formatea obligaciones ambientales para tabla con cumplimiento"""
+        # TODO: Cargar desde fuente de datos real
+        return []
+    
+    def _formatear_obligaciones_anexos(self) -> List[Dict]:
+        """Formatea obligaciones anexos para tabla con cumplimiento"""
+        # TODO: Cargar desde fuente de datos real
+        return []
+    
+    def _obtener_ruta_acta_inicio(self) -> str:
+        """Obtiene la ruta del acta de inicio (dinámico según mes)"""
+        mes_nombre = config.MESES[self.mes]
+        return f"01{mes_nombre[:3].upper()} - 30{mes_nombre[:3].upper()}/ 01 OBLIGACIONES GENERALES/ OBLIGACIÓN 2,5,6,9,13/ ANEXOS OTROS/ SCJ-1809-2024 ACTA DE INICIO.PDF"
+    
+    def _obtener_numero_adicion(self) -> str:
+        """Obtiene el número de adición si aplica (dinámico)"""
+        # TODO: Cargar desde fuente de datos o config
+        return "01"  # Por defecto
+    
+    def _obtener_ruta_poliza(self) -> str:
+        """Obtiene la ruta de modificación de póliza si aplica (dinámico)"""
+        mes_nombre = config.MESES[self.mes]
+        return f"01{mes_nombre[:3].upper()} - 30{mes_nombre[:3].upper()} / 01 OBLIGACIONES GENERALES/ OBLIGACIÓN 4/ ANEXOS OTROS/ MODIFICACIÓN PÓLIZA.PDF"
+    
+    def _obtener_nota_infraestructura(self) -> str:
+        """Obtiene nota adicional sobre infraestructura si aplica (dinámico)"""
+        # Ejemplo: "Se aclara que se desmonta La Estación de Transmilenio Calle 26 con 12 cámaras por obras del metro"
+        # TODO: Cargar desde fuente de datos
+        return ""
 
 
