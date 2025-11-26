@@ -102,15 +102,21 @@ class ExtractorObservaciones:
         if isinstance(ruta_archivo, Path):
             ruta_archivo = str(ruta_archivo)
         
-        # Verificar si es URL de SharePoint (solo URLs completas, no rutas relativas del servidor)
-        if isinstance(ruta_archivo, str) and self.sharepoint_extractor.es_url_sharepoint(ruta_archivo):
-            print(f"[DEBUG] Detectada URL de SharePoint, descargando...")
-            return self._extraer_texto_desde_sharepoint(ruta_archivo)
-        
-        # Verificar si es ruta relativa del servidor (comienza con /sites/, /teams/, etc.)
-        if isinstance(ruta_archivo, str) and (ruta_archivo.startswith('/sites/') or ruta_archivo.startswith('/teams/') or ruta_archivo.startswith('/personal/')):
-            print(f"[DEBUG] Detectada ruta relativa del servidor, descargando desde SharePoint...")
-            return self._extraer_texto_desde_sharepoint(ruta_archivo)
+        # Verificar si es un archivo temporal ya descargado (no volver a descargar)
+        if isinstance(ruta_archivo, str):
+            ruta_path = Path(ruta_archivo)
+            # Si el archivo existe localmente y está en el directorio temporal, ya fue descargado
+            if ruta_path.exists() and str(ruta_path.parent).startswith(str(Path(tempfile.gettempdir()))):
+                print(f"[DEBUG] Archivo ya descargado, extrayendo texto directamente...")
+                # Continuar con la extracción local (no descargar nuevamente)
+            # Verificar si es URL de SharePoint (solo URLs completas, no rutas relativas del servidor)
+            elif self.sharepoint_extractor.es_url_sharepoint(ruta_archivo):
+                print(f"[DEBUG] Detectada URL de SharePoint, descargando...")
+                return self._extraer_texto_desde_sharepoint(ruta_archivo)
+            # Verificar si es ruta relativa del servidor (comienza con /sites/, /teams/, etc.)
+            elif ruta_archivo.startswith('/sites/') or ruta_archivo.startswith('/teams/') or ruta_archivo.startswith('/personal/'):
+                print(f"[DEBUG] Detectada ruta relativa del servidor, descargando desde SharePoint...")
+                return self._extraer_texto_desde_sharepoint(ruta_archivo)
         
         # Convertir a Path si es string
         if isinstance(ruta_archivo, str):
@@ -332,6 +338,9 @@ OBSERVACIÓN:"""
         
         Args:
             obligacion: Diccionario con obligación (debe tener 'anexo', 'obligacion', 'periodicidad', 'cumplio')
+                       Opcionalmente puede tener:
+                       - 'revisaranexo': bool - Si False, usa 'defaultobservaciones' sin verificar anexo
+                       - 'defaultobservaciones': str - Observación por defecto si revisaranexo=False
             informes_aprobados_contexto: Lista de textos extraídos de los últimos 3 informes aprobados (opcional)
             
         Returns:
@@ -343,24 +352,104 @@ OBSERVACIÓN:"""
         if obligacion.get("observaciones") and not obligacion.get("regenerar_observacion", False):
             return obligacion
         
+        # Verificar si debe revisar el anexo o usar observación por defecto
+        revisar_anexo = obligacion.get("revisaranexo", True)  # Por defecto True para mantener compatibilidad
+        
+        if not revisar_anexo:
+            # Si no debe revisar anexo, usar observación por defecto
+            default_observaciones = obligacion.get("defaultobservaciones", "")
+            if default_observaciones:
+                print(f"[INFO] Obligación {obligacion.get('item', 'N/A')}: Usando observación por defecto (revisaranexo=false)")
+                obligacion_actualizada = obligacion.copy()
+                obligacion_actualizada["observaciones"] = default_observaciones
+                obligacion_actualizada["observacion_generada_llm"] = False
+                return obligacion_actualizada
+            else:
+                print(f"[WARNING] Obligación {obligacion.get('item', 'N/A')}: revisaranexo=false pero no hay defaultobservaciones, usando fallback")
+                # Continuar con el proceso normal si no hay defaultobservaciones
+        
         # Intentar extraer texto del anexo
         texto_anexo = ""
-        if ruta_anexo and ruta_anexo != "-":
+        if ruta_anexo and ruta_anexo != "-" and ruta_anexo.lower() != "no aplica":
             # Convertir ruta relativa a Path absoluto
             # Las rutas vienen como: "01SEP - 30SEP / 01 OBLIGACIONES GENERALES/ OBLIGACIÓN 1,7,8,9,10,11,13,14 y 15/ Oficio Obli SEPTIEMBRE 2025.pdf"
             print(f"[INFO] Procesando anexo para obligación {obligacion.get('item', 'N/A')}: {ruta_anexo}")
             ruta_completa = self._resolver_ruta_anexo(ruta_anexo)
             if ruta_completa:
                 print(f"[INFO] Ruta resuelta: {ruta_completa}")
-                print(f"[INFO] Extrayendo texto del anexo...")
-                texto_anexo = self.extraer_texto_archivo(ruta_completa)
-                print(f"[INFO] Texto extraído: {len(texto_anexo)} caracteres")
-                if len(texto_anexo) == 0:
-                    print(f"[WARNING] No se pudo extraer texto del anexo (archivo puede estar vacío o corrupto)")
+                
+                # Verificar existencia del archivo antes de intentar extraer
+                archivo_existe = False
+                archivo_temp_descargado = None
+                
+                if isinstance(ruta_completa, str):
+                    # Si es URL de SharePoint o ruta relativa, intentar descargar para verificar existencia
+                    if self.sharepoint_extractor.es_url_sharepoint(ruta_completa) or ruta_completa.startswith('/sites/') or ruta_completa.startswith('/teams/'):
+                        # Para SharePoint, intentar descargar (el método descargar_archivo retorna None si no existe)
+                        print(f"[INFO] Verificando existencia del archivo en SharePoint...")
+                        archivo_temp_descargado = self.sharepoint_extractor.descargar_archivo(ruta_completa)
+                        if archivo_temp_descargado and archivo_temp_descargado.exists():
+                            archivo_existe = True
+                            # Guardar referencia para limpiar después
+                            self.archivos_temporales.append(archivo_temp_descargado)
+                            # Usar el archivo descargado para extraer texto
+                            ruta_completa = str(archivo_temp_descargado)
+                        else:
+                            print(f"[WARNING] El archivo no existe en SharePoint: {ruta_anexo}")
+                    else:
+                        # Archivo local
+                        ruta_path = Path(ruta_completa)
+                        archivo_existe = ruta_path.exists()
+                        if not archivo_existe:
+                            print(f"[WARNING] El archivo no existe localmente: {ruta_completa}")
+                else:
+                    # Ya es un Path
+                    archivo_existe = ruta_completa.exists() if hasattr(ruta_completa, 'exists') else Path(ruta_completa).exists()
+                    if not archivo_existe:
+                        print(f"[WARNING] El archivo no existe: {ruta_completa}")
+                
+                if archivo_existe:
+                    print(f"[INFO] Archivo encontrado, extrayendo texto del anexo...")
+                    # Si ya descargamos el archivo, usar directamente extraer_texto_archivo con la ruta local
+                    # Si no, extraer_texto_archivo manejará la descarga si es necesario
+                    texto_anexo = self.extraer_texto_archivo(ruta_completa)
+                    print(f"[INFO] Texto extraído: {len(texto_anexo)} caracteres")
+                    if len(texto_anexo) == 0:
+                        print(f"[WARNING] No se pudo extraer texto del anexo (archivo puede estar vacío o corrupto)")
+                else:
+                    # Archivo no existe: verificar si hay observación por defecto
+                    print(f"[WARNING] El archivo de anexo no existe: {ruta_anexo}")
+                    default_observaciones = obligacion.get("defaultobservaciones", "")
+                    if default_observaciones:
+                        print(f"[INFO] Usando observación por defecto ya que el archivo no existe")
+                        obligacion_actualizada = obligacion.copy()
+                        obligacion_actualizada["observaciones"] = default_observaciones
+                        obligacion_actualizada["observacion_generada_llm"] = False
+                        return obligacion_actualizada
+                    else:
+                        print(f"[INFO] Continuando con revisión usando fallback (no hay defaultobservaciones)")
             else:
+                # No se pudo resolver la ruta: verificar si hay observación por defecto
                 print(f"[WARNING] No se pudo resolver ruta del anexo: {ruta_anexo}")
+                default_observaciones = obligacion.get("defaultobservaciones", "")
+                if default_observaciones:
+                    print(f"[INFO] Usando observación por defecto ya que no se pudo resolver la ruta")
+                    obligacion_actualizada = obligacion.copy()
+                    obligacion_actualizada["observaciones"] = default_observaciones
+                    obligacion_actualizada["observacion_generada_llm"] = False
+                    return obligacion_actualizada
+                else:
+                    print(f"[INFO] Continuando con revisión usando fallback (no hay defaultobservaciones)")
         else:
-            print(f"[INFO] No hay anexo para la obligación {obligacion.get('item', 'N/A')}")
+            print(f"[INFO] No hay anexo para la obligación {obligacion.get('item', 'N/A')} (ruta: '{ruta_anexo}')")
+            # Si no hay anexo pero hay defaultobservaciones, usarlas
+            default_observaciones = obligacion.get("defaultobservaciones", "")
+            if default_observaciones:
+                print(f"[INFO] Usando observación por defecto ya que no hay anexo")
+                obligacion_actualizada = obligacion.copy()
+                obligacion_actualizada["observaciones"] = default_observaciones
+                obligacion_actualizada["observacion_generada_llm"] = False
+                return obligacion_actualizada
         
         # Generar observación
         print(f"[INFO] Generando observación con LLM (cliente disponible: {bool(self.client)}, texto disponible: {len(texto_anexo) > 50})")

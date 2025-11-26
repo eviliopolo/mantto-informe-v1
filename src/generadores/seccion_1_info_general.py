@@ -534,6 +534,9 @@ class GeneradorSeccion1(GeneradorSeccion):
         # Reemplazar la tabla de obligaciones generales dinámicamente
         self._reemplazar_tabla_obligaciones_generales(doc)
         
+        # Reemplazar la tabla de obligaciones específicas dinámicamente
+        self._reemplazar_tabla_obligaciones_especificas(doc)
+        
         # Retornar el DocxTemplate modificado
         return doc_template
     
@@ -790,25 +793,150 @@ class GeneradorSeccion1(GeneradorSeccion):
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_generales_raw)} datos)")
     
-    def _formatear_celda(self, celda, alineacion=WD_ALIGN_PARAGRAPH.LEFT, 
-                         tamano_fuente=10, negrita=False):
+    def _reemplazar_tabla_obligaciones_especificas(self, doc: Document) -> None:
         """
-        Formatea una celda de tabla con estilo consistente
+        Busca y reemplaza la tabla de obligaciones específicas con datos dinámicos
+        Similar a _reemplazar_tabla_obligaciones_generales pero busca "1.5.2" o "OBLIGACIONES ESPECÍFICAS"
         """
-        for parrafo in celda.paragraphs:
-            parrafo.alignment = alineacion
-            for run in parrafo.runs:
-                run.font.size = Pt(tamano_fuente)
-                run.font.bold = negrita
-                run.font.name = 'Calibri'
+        if not self.obligaciones_especificas_raw:
+            print("[WARNING] No hay obligaciones específicas para reemplazar en la tabla")
+            return
         
-        # Si la celda está vacía, agregar un párrafo con el formato
-        if not celda.paragraphs:
-            parrafo = celda.add_paragraph()
-            parrafo.alignment = alineacion
-            run = parrafo.add_run()
-            run.font.size = Pt(tamano_fuente)
-            run.font.bold = negrita
-            run.font.name = 'Calibri'
+        tabla_encontrada = None
+        
+        # Estrategia: Buscar el párrafo "1.5.2" o "OBLIGACIONES ESPECÍFICAS" y luego la siguiente tabla con 6 columnas
+        encontro_titulo = False
+        elementos = doc.element.body
+        
+        for i, elemento in enumerate(elementos):
+            if hasattr(elemento, 'text') and elemento.text:
+                texto = elemento.text.strip().upper()
+                if ('1.5.2' in texto or '1.5.2.' in texto) and ('OBLIGACIONES' in texto and 'ESPECÍFICAS' in texto):
+                    print(f"[INFO] Título '1.5.2. OBLIGACIONES ESPECÍFICAS' encontrado en elemento {i}")
+                    encontro_titulo = True
+                    
+                    # Contar cuántas tablas hay antes de este título
+                    tablas_antes = sum(1 for x in elementos[:i] if hasattr(x, 'tag') and x.tag.endswith('}tbl'))
+                    print(f"[INFO] Tablas antes del título: {tablas_antes}")
+                    
+                    # Buscar la siguiente tabla después de este párrafo
+                    tabla_idx_en_doc_tables = -1
+                    current_table_count = 0
+                    for k, doc_table in enumerate(doc.tables):
+                        if current_table_count >= tablas_antes:
+                            # Esta es una tabla que aparece después del título
+                            if len(doc_table.columns) == 6:  # Buscamos una tabla con 6 columnas
+                                # Verificar que tenga encabezados de obligaciones
+                                if len(doc_table.rows) > 0:
+                                    primera_fila = doc_table.rows[0]
+                                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                                    tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                                    if tiene_item and tiene_obligacion:
+                                        tabla_encontrada = doc_table
+                                        tabla_idx_en_doc_tables = k
+                                        print(f"[INFO] Tabla de obligaciones específicas encontrada (índice {k})")
+                                        break
+                        if hasattr(doc_table._element, 'tag') and doc_table._element.tag.endswith('}tbl'):
+                            current_table_count += 1
+                    break
+        
+        # Estrategia 2: Si no encontramos por título, buscar tabla con formato correcto después de la tabla de generales
+        if not tabla_encontrada:
+            print("[INFO] Intentando buscar tabla de obligaciones específicas por formato...")
+            for k, doc_table in enumerate(doc.tables):
+                if len(doc_table.rows) > 0 and len(doc_table.columns) == 6:
+                    primera_fila = doc_table.rows[0]
+                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                    tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                    tiene_periodicidad = any('PERIODICIDAD' in h for h in encabezados)
+                    tiene_observaciones = any('OBSERVACION' in h or 'OBSERVACIÓN' in h for h in encabezados)
+                    tiene_anexo = any('ANEXO' in h for h in encabezados)
+                    
+                    # Si tiene todas las columnas esperadas y no es la tabla de generales (ya procesada)
+                    if tiene_item and tiene_obligacion and tiene_periodicidad and tiene_observaciones and tiene_anexo:
+                        # Verificar que no sea la tabla de generales (comparar número de filas)
+                        # La tabla de generales ya debería tener 16 filas de datos
+                        if len(doc_table.rows) != 17:  # 1 encabezado + 16 datos de generales
+                            tabla_encontrada = doc_table
+                            print(f"[INFO] Tabla de obligaciones específicas encontrada por formato (índice {k})")
+                            break
+        
+        if tabla_encontrada:
+            self._crear_tabla_obligaciones_especificas(doc, tabla_encontrada)
+        else:
+            print("[WARNING] No se encontró la tabla de obligaciones específicas en el template con 6 columnas.")
+            print("[INFO] Intentando buscar la primera tabla con 6 columnas que no sea la de generales...")
+            for k, doc_table in enumerate(doc.tables):
+                if len(doc_table.columns) == 6 and len(doc_table.rows) != 17:
+                    tabla_encontrada = doc_table
+                    print(f"[INFO] Usando tabla con 6 columnas (índice {k}) para obligaciones específicas")
+                    self._crear_tabla_obligaciones_especificas(doc, tabla_encontrada)
+                    break
+            
+            if not tabla_encontrada:
+                print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar las obligaciones específicas.")
+    
+    def _crear_tabla_obligaciones_especificas(self, doc: Document, tabla_existente) -> None:
+        """
+        Reemplaza el contenido de la tabla existente con los datos dinámicos de obligaciones específicas
+        """
+        print(f"[INFO] Reemplazando tabla de obligaciones específicas con {len(self.obligaciones_especificas_raw)} obligaciones")
+        
+        # Limpiar todas las filas excepto el encabezado (fila 0)
+        num_filas_originales = len(tabla_existente.rows)
+        while len(tabla_existente.rows) > 1:
+            tbl = tabla_existente._tbl
+            tbl.remove(tabla_existente.rows[-1]._tr)
+        
+        print(f"[INFO] Tabla limpiada: {num_filas_originales} filas -> {len(tabla_existente.rows)} fila(s) (encabezado)")
+        
+        # Obtener número de columnas
+        num_cols = len(tabla_existente.columns)
+        print(f"[INFO] Tabla tiene {num_cols} columnas")
+        
+        # Encabezados esperados
+        encabezados_esperados = ["ÍTEM", "OBLIGACIÓN", "PERIODICIDAD", "CUMPLIÓ / NO CUMPLIÓ", "OBSERVACIONES", "ANEXO"]
+        
+        # Actualizar encabezados si no coinciden
+        if len(tabla_existente.rows) > 0:
+            header_cells = tabla_existente.rows[0].cells
+            current_headers = [self._limpiar_texto_celda(c.text) for c in header_cells]
+            print(f"[INFO] Encabezados de la tabla: {current_headers}")
+            
+            if current_headers != encabezados_esperados:
+                print("[INFO] Los encabezados de la tabla no coinciden, actualizando...")
+                for i, header_text in enumerate(encabezados_esperados):
+                    if i < num_cols:
+                        self._formatear_celda(header_cells[i], header_text, bold=True, center=True)
+                    else:
+                        print(f"[WARNING] No hay suficientes columnas para el encabezado: {header_text}")
+        
+        # Agregar datos
+        for obligacion in self.obligaciones_especificas_raw:
+            row_cells = tabla_existente.add_row().cells
+            self._formatear_celda(row_cells[0], str(obligacion.get("item", "")))
+            self._formatear_celda(row_cells[1], obligacion.get("obligacion", ""))
+            self._formatear_celda(row_cells[2], obligacion.get("periodicidad", ""), center=True)
+            self._formatear_celda(row_cells[3], obligacion.get("cumplio", ""), center=True)
+            self._formatear_celda(row_cells[4], obligacion.get("observaciones", ""))
+            self._formatear_celda(row_cells[5], obligacion.get("anexo", ""))
+        
+        print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_especificas_raw)} datos)")
+    
+    def _formatear_celda(self, cell, text, bold=False, center=False):
+        """Formatea el texto de una celda"""
+        cell.text = text
+        paragraph = cell.paragraphs[0]
+        if center:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in paragraph.runs:
+            run.font.bold = bold
+            run.font.size = Pt(10)  # Tamaño de fuente consistente
+    
+    def _limpiar_texto_celda(self, text: str) -> str:
+        """Limpia el texto de una celda para comparación (elimina saltos de línea y espacios extra)"""
+        return ' '.join(text.replace('\n', ' ').split()).upper()
 
 
