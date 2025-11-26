@@ -9,6 +9,10 @@ import os
 from .base import GeneradorSeccion
 from src.utils.formato_moneda import formato_moneda_cop
 from src.ia.extractor_observaciones import get_extractor_observaciones
+from src.utils.informes_aprobados import obtener_contexto_informes_aprobados
+from docx import Document
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 import config
 
 class GeneradorSeccion1(GeneradorSeccion):
@@ -120,20 +124,26 @@ class GeneradorSeccion1(GeneradorSeccion):
                     # Generar observaciones dinámicas si está habilitado
                     if self.usar_llm_observaciones and self.extractor_observaciones:
                         print("[INFO] Generando observaciones dinámicas desde anexos usando LLM...")
+                        
+                        # Obtener contexto de los últimos 3 informes aprobados
+                        print("[INFO] Obteniendo contexto de informes aprobados anteriores...")
+                        contexto_informes = obtener_contexto_informes_aprobados(cantidad=3)
+                        
+                        # Procesar obligaciones con contexto de informes aprobados
                         self.obligaciones_generales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
                             for obl in self.obligaciones_generales_raw
                         ]
                         self.obligaciones_especificas_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
                             for obl in self.obligaciones_especificas_raw
                         ]
                         self.obligaciones_ambientales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
                             for obl in self.obligaciones_ambientales_raw
                         ]
                         self.obligaciones_anexos_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
                             for obl in self.obligaciones_anexos_raw
                         ]
             except Exception as e:
@@ -510,5 +520,295 @@ class GeneradorSeccion1(GeneradorSeccion):
         # Ejemplo: "Se aclara que se desmonta La Estación de Transmilenio Calle 26 con 12 cámaras por obras del metro"
         # TODO: Cargar desde fuente de datos
         return ""
+    
+    def generar(self):
+        """
+        Genera la sección completa, reemplazando dinámicamente la tabla de obligaciones generales
+        """
+        # Primero, generar el documento base usando el método de la clase padre
+        doc_template = super().generar()
+        
+        # Acceder al documento interno de DocxTemplate (atributo .docx es un Document de python-docx)
+        doc = doc_template.docx
+        
+        # Reemplazar la tabla de obligaciones generales dinámicamente
+        self._reemplazar_tabla_obligaciones_generales(doc)
+        
+        # Retornar el DocxTemplate modificado
+        return doc_template
+    
+    def guardar(self, output_path: Path) -> None:
+        """
+        Genera y guarda la sección, asegurando que los cambios en las tablas se guarden correctamente
+        """
+        doc_template = self.generar()
+        
+        # Guardar el documento modificado directamente desde el Document interno
+        # Esto asegura que los cambios en las tablas se guarden correctamente
+        doc_template.docx.save(str(output_path))
+        print(f"[OK] {self.nombre_seccion} guardada en: {output_path}")
+    
+    def _reemplazar_tabla_obligaciones_generales(self, doc: Document) -> None:
+        """
+        Busca y reemplaza la tabla de obligaciones generales con datos dinámicos
+        """
+        if not self.obligaciones_generales_raw:
+            print("[WARNING] No hay obligaciones generales para reemplazar en la tabla")
+            return
+        
+        # Buscar la tabla que está después del texto "1.5.1" o "OBLIGACIONES GENERALES"
+        tabla_encontrada = None
+        
+        # Estrategia 1: Buscar párrafos que mencionen "1.5.1" o "OBLIGACIONES GENERALES"
+        # y luego buscar la siguiente tabla
+        encontro_titulo = False
+        for parrafo in doc.paragraphs:
+            texto = parrafo.text.upper()
+            if '1.5.1' in texto or ('OBLIGACIONES' in texto and 'GENERALES' in texto):
+                encontro_titulo = True
+                # Buscar la siguiente tabla después de este párrafo
+                # Necesitamos encontrar el elemento XML del párrafo y buscar el siguiente elemento tabla
+                break
+        
+        # Si encontramos el título, buscar la tabla siguiente
+        if encontro_titulo:
+            # Buscar en el XML del documento
+            elementos = doc.element.body
+            tabla_count_before = 0
+            encontro_titulo_xml = False
+            
+            for i, elemento in enumerate(elementos):
+                # Si encontramos una tabla antes del título, incrementar contador
+                if hasattr(elemento, 'tag') and elemento.tag.endswith('}tbl'):
+                    if not encontro_titulo_xml:
+                        tabla_count_before += 1
+                
+                # Verificar si es un párrafo con el texto buscado
+                if hasattr(elemento, 'text') and elemento.text:
+                    texto = elemento.text.upper()
+                    if '1.5.1' in texto or ('OBLIGACIONES' in texto and 'GENERALES' in texto):
+                        encontro_titulo_xml = True
+                        print(f"[INFO] Título encontrado en elemento {i}, tablas antes: {tabla_count_before}")
+                        # Buscar la siguiente tabla después del título
+                        for j in range(i + 1, len(elementos)):
+                            siguiente = elementos[j]
+                            if hasattr(siguiente, 'tag') and siguiente.tag.endswith('}tbl'):
+                                # Esta es la tabla que buscamos
+                                tabla_index = tabla_count_before
+                                if tabla_index < len(doc.tables):
+                                    tabla_candidata = doc.tables[tabla_index]
+                                    # Verificar que sea la tabla correcta por sus encabezados
+                                    if len(tabla_candidata.rows) > 0:
+                                        primera_fila = tabla_candidata.rows[0]
+                                        encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                                        tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                                        tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                                        if tiene_item and tiene_obligacion:
+                                            tabla_encontrada = tabla_candidata
+                                            print(f"[INFO] Tabla de obligaciones encontrada (índice {tabla_index})")
+                                            break
+                                tabla_count_before += 1
+                        break
+        
+        # Estrategia 2: Si no encontramos por título, buscar tabla con formato correcto
+        if not tabla_encontrada:
+            print("[INFO] Buscando tabla por formato de encabezados...")
+            for idx, tabla in enumerate(doc.tables):
+                if len(tabla.rows) > 0:
+                    primera_fila = tabla.rows[0]
+                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                    print(f"[DEBUG] Tabla {idx}: {len(tabla.columns)} columnas, encabezados: {encabezados[:3]}...")
+                    
+                    # Buscar palabras clave en los encabezados
+                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                    tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                    tiene_periodicidad = any('PERIODICIDAD' in h for h in encabezados)
+                    tiene_observaciones = any('OBSERVACION' in h or 'OBSERVACIÓN' in h for h in encabezados)
+                    tiene_anexo = any('ANEXO' in h for h in encabezados)
+                    
+                    # Priorizar tablas con más columnas y más palabras clave
+                    puntuacion = sum([tiene_item, tiene_obligacion, tiene_periodicidad, tiene_observaciones, tiene_anexo])
+                    
+                    if tiene_item and tiene_obligacion and tiene_periodicidad:
+                        if not tabla_encontrada or (puntuacion > 3 and len(tabla.columns) >= 5):
+                            tabla_encontrada = tabla
+                            print(f"[INFO] Tabla candidata encontrada (índice {idx}): {len(tabla.columns)} columnas, puntuación: {puntuacion}")
+                            if puntuacion >= 4 and len(tabla.columns) >= 5:
+                                print(f"[INFO] Tabla seleccionada: {len(tabla.columns)} columnas")
+                                break
+        
+        if not tabla_encontrada:
+            print("[WARNING] No se encontró la tabla de obligaciones generales en el template")
+            print("[INFO] Listando todas las tablas disponibles...")
+            for idx, tabla in enumerate(doc.tables):
+                primera_fila = tabla.rows[0] if tabla.rows else None
+                encabezados = [celda.text.strip().upper() for celda in primera_fila.cells] if primera_fila else []
+                print(f"[INFO] Tabla {idx}: {len(tabla.columns)} columnas, {len(tabla.rows)} filas, encabezados: {encabezados}")
+            
+            print("[INFO] Intentando usar la primera tabla con más de 5 columnas...")
+            # Último recurso: usar la primera tabla grande
+            for tabla in doc.tables:
+                if len(tabla.columns) >= 5:
+                    tabla_encontrada = tabla
+                    print(f"[INFO] Usando tabla con {len(tabla.columns)} columnas y {len(tabla.rows)} filas")
+                    break
+        
+        if tabla_encontrada:
+            # Verificar que sea la tabla correcta antes de reemplazar
+            if len(tabla_encontrada.rows) > 0:
+                primera_fila = tabla_encontrada.rows[0]
+                encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                
+                if not (tiene_item and tiene_obligacion):
+                    print(f"[WARNING] La tabla encontrada no parece ser la tabla de obligaciones generales")
+                    print(f"[WARNING] Encabezados: {encabezados}")
+                    print(f"[WARNING] Buscando tabla alternativa...")
+                    tabla_encontrada = None
+                    # Buscar por formato específico
+                    for tabla in doc.tables:
+                        if len(tabla.rows) > 0:
+                            primera_fila = tabla.rows[0]
+                            encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                            tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                            tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                            tiene_periodicidad = any('PERIODICIDAD' in h for h in encabezados)
+                            if tiene_item and tiene_obligacion and tiene_periodicidad:
+                                tabla_encontrada = tabla
+                                print(f"[INFO] Tabla correcta encontrada por formato")
+                                break
+        
+        if tabla_encontrada:
+            # Reemplazar la tabla encontrada
+            self._crear_tabla_obligaciones_generales(doc, tabla_encontrada)
+        else:
+            print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar")
+            print("[ERROR] Asegúrate de que el template tenga una tabla con encabezados: ÍTEM, OBLIGACIÓN, PERIODICIDAD, etc.")
+    
+    def _crear_tabla_obligaciones_generales(self, doc: Document, tabla_existente) -> None:
+        """
+        Reemplaza el contenido de la tabla existente con los datos dinámicos de obligaciones generales
+        """
+        print(f"[INFO] Reemplazando tabla de obligaciones generales con {len(self.obligaciones_generales_raw)} obligaciones")
+        
+        # Limpiar todas las filas excepto el encabezado (fila 0)
+        num_filas_originales = len(tabla_existente.rows)
+        while len(tabla_existente.rows) > 1:
+            tbl = tabla_existente._tbl
+            tbl.remove(tabla_existente.rows[-1]._tr)
+        
+        print(f"[INFO] Tabla limpiada: {num_filas_originales} filas -> {len(tabla_existente.rows)} fila(s) (encabezado)")
+        
+        # Obtener número de columnas
+        num_cols = len(tabla_existente.columns)
+        print(f"[INFO] Tabla tiene {num_cols} columnas")
+        
+        # Verificar encabezados de la tabla para entender su estructura
+        if len(tabla_existente.rows) > 0:
+            encabezados = [celda.text.strip().upper() for celda in tabla_existente.rows[0].cells]
+            print(f"[INFO] Encabezados de la tabla: {encabezados}")
+        
+        # Si la tabla tiene menos de 6 columnas, intentar agregar columnas faltantes
+        if num_cols < 6:
+            print(f"[WARNING] La tabla tiene solo {num_cols} columnas, se necesitan 6. Intentando agregar columnas...")
+            # Agregar columnas faltantes
+            columnas_faltantes = 6 - num_cols
+            for i in range(columnas_faltantes):
+                tabla_existente.add_column(Inches(1.5))
+                print(f"[INFO] Columna {num_cols + i + 1} agregada")
+            num_cols = len(tabla_existente.columns)
+            print(f"[INFO] Tabla ahora tiene {num_cols} columnas")
+        
+        # Actualizar encabezados si es necesario
+        if len(tabla_existente.rows) > 0:
+            encabezados_esperados = ['ÍTEM', 'OBLIGACIÓN', 'PERIODICIDAD', 'CUMPLIÓ / NO CUMPLIÓ', 'OBSERVACIONES', 'ANEXO']
+            primera_fila = tabla_existente.rows[0]
+            for i in range(min(num_cols, 6)):
+                if i < len(primera_fila.cells):
+                    celda = primera_fila.cells[i]
+                    texto_actual = celda.text.strip().upper()
+                    texto_esperado = encabezados_esperados[i].upper()
+                    if texto_actual != texto_esperado and len(texto_actual) < 5:  # Solo actualizar si está vacío o muy corto
+                        celda.text = encabezados_esperados[i]
+                        # Formatear encabezado
+                        for parrafo in celda.paragraphs:
+                            for run in parrafo.runs:
+                                run.font.bold = True
+                                run.font.size = Pt(10)
+        
+        # Mapeo de columnas
+        columnas_esperadas = ['item', 'obligacion', 'periodicidad', 'cumplio', 'observaciones', 'anexo']
+        mapeo_columnas = {
+            0: 'item',
+            1: 'obligacion', 
+            2: 'periodicidad',
+            3: 'cumplio',
+            4: 'observaciones',
+            5: 'anexo'
+        }
+        
+        # Agregar filas con los datos
+        for obligacion in self.obligaciones_generales_raw:
+            fila = tabla_existente.add_row()
+            celdas = fila.cells
+            
+            # Llenar cada celda según el mapeo
+            for i in range(min(num_cols, 6)):
+                campo = mapeo_columnas.get(i, '')
+                valor = obligacion.get(campo, '')
+                
+                if i < len(celdas):
+                    # Limpiar contenido existente de la celda
+                    celdas[i].text = ''
+                    # Agregar el nuevo texto
+                    parrafo = celdas[i].paragraphs[0] if celdas[i].paragraphs else celdas[i].add_paragraph()
+                    parrafo.clear()
+                    run = parrafo.add_run(str(valor) if valor else '')
+                    
+                    # Aplicar formato según la columna
+                    if i == 0:  # ÍTEM
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run.font.size = Pt(10)
+                    elif i == 1:  # OBLIGACIÓN
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        run.font.size = Pt(10)
+                    elif i == 2:  # PERIODICIDAD
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run.font.size = Pt(10)
+                    elif i == 3:  # CUMPLIÓ
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run.font.size = Pt(10)
+                    elif i == 4:  # OBSERVACIONES
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        run.font.size = Pt(9)
+                    elif i == 5:  # ANEXO
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        run.font.size = Pt(9)
+                    
+                    run.font.name = 'Calibri'
+        
+        print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_generales_raw)} datos)")
+    
+    def _formatear_celda(self, celda, alineacion=WD_ALIGN_PARAGRAPH.LEFT, 
+                         tamano_fuente=10, negrita=False):
+        """
+        Formatea una celda de tabla con estilo consistente
+        """
+        for parrafo in celda.paragraphs:
+            parrafo.alignment = alineacion
+            for run in parrafo.runs:
+                run.font.size = Pt(tamano_fuente)
+                run.font.bold = negrita
+                run.font.name = 'Calibri'
+        
+        # Si la celda está vacía, agregar un párrafo con el formato
+        if not celda.paragraphs:
+            parrafo = celda.add_paragraph()
+            parrafo.alignment = alineacion
+            run = parrafo.add_run()
+            run.font.size = Pt(tamano_fuente)
+            run.font.bold = negrita
+            run.font.name = 'Calibri'
 
 

@@ -19,6 +19,7 @@ DATA_DIR = BASE_DIR / "data"
 OUTPUT_DIR = BASE_DIR / "output"
 FIJOS_DIR = DATA_DIR / "fijos"
 FUENTES_DIR = DATA_DIR / "fuentes"
+INFORMES_APROBADOS_DIR = BASE_DIR / "informesAprobados"
 
 # Crear directorios si no existen
 for dir_path in [TEMPLATES_DIR, DATA_DIR, OUTPUT_DIR, FIJOS_DIR, FUENTES_DIR]:

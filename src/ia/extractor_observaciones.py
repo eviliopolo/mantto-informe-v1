@@ -226,15 +226,18 @@ class ExtractorObservaciones:
         return texto
     
     def generar_observacion_llm(self, texto_anexo: str, obligacion: str, 
-                                periodicidad: str, cumplio: str) -> str:
+                                periodicidad: str, cumplio: str,
+                                informes_aprobados_contexto: Optional[List[str]] = None) -> str:
         """
         Genera observación de cumplimiento usando LLM basándose en el contenido del anexo
+        y los últimos informes aprobados como contexto
         
         Args:
             texto_anexo: Texto extraído del archivo de anexo
             obligacion: Texto de la obligación
             periodicidad: Periodicidad de la obligación
             cumplio: Estado de cumplimiento ("Cumplió" o "No Cumplió")
+            informes_aprobados_contexto: Lista de textos extraídos de los últimos 3 informes aprobados (opcional)
             
         Returns:
             Observación generada
@@ -248,23 +251,35 @@ class ExtractorObservaciones:
             return self._generar_observacion_fallback(obligacion, cumplio)
         
         try:
+            # Construir contexto de informes aprobados
+            contexto_informes = ""
+            if informes_aprobados_contexto:
+                contexto_informes = "\n\nCONTEXTO DE INFORMES APROBADOS ANTERIORES:\n"
+                for i, texto_informe in enumerate(informes_aprobados_contexto[:3], 1):
+                    # Extraer solo la sección relevante de cada informe (sección 1.5.1)
+                    # Limitar a 2000 caracteres por informe para no exceder tokens
+                    texto_limite = texto_informe[:2000] if len(texto_informe) > 2000 else texto_informe
+                    contexto_informes += f"\n--- Informe Aprobado {i} ---\n{texto_limite}\n"
+            
             prompt = f"""Eres un asistente que genera observaciones de cumplimiento contractual para informes técnicos.
 
 CONTEXTO:
 - Obligación: {obligacion}
 - Periodicidad: {periodicidad}
 - Estado: {cumplio}
+{contexto_informes}
 
-CONTENIDO DEL ANEXO:
+CONTENIDO DEL ANEXO ACTUAL:
 {texto_anexo[:4000]}  # Limitar a 4000 caracteres para evitar tokens excesivos
 
 INSTRUCCIONES:
 Genera una observación profesional y concisa (máximo 200 palabras) que:
 1. Confirme el cumplimiento de la obligación
-2. Haga referencia específica al contenido del anexo
-3. Sea apropiada para un informe técnico formal
-4. Use lenguaje profesional y técnico
-5. Mencione detalles relevantes del anexo si son importantes
+2. Haga referencia específica al contenido del anexo actual
+3. Sea consistente con el estilo y formato de observaciones de informes anteriores (si están disponibles)
+4. Sea apropiada para un informe técnico formal
+5. Use lenguaje profesional y técnico
+6. Mencione detalles relevantes del anexo si son importantes
 
 Formato: Texto corrido, sin viñetas ni listas.
 
@@ -311,12 +326,13 @@ OBSERVACIÓN:"""
         else:
             return f"No se cumplió la obligación: {obligacion[:100]}..."
     
-    def procesar_obligacion(self, obligacion: Dict) -> Dict:
+    def procesar_obligacion(self, obligacion: Dict, informes_aprobados_contexto: Optional[List[str]] = None) -> Dict:
         """
         Procesa una obligación y genera observación dinámica desde el anexo
         
         Args:
             obligacion: Diccionario con obligación (debe tener 'anexo', 'obligacion', 'periodicidad', 'cumplio')
+            informes_aprobados_contexto: Lista de textos extraídos de los últimos 3 informes aprobados (opcional)
             
         Returns:
             Obligación con observación actualizada
@@ -352,7 +368,8 @@ OBSERVACIÓN:"""
             texto_anexo=texto_anexo,
             obligacion=obligacion.get("obligacion", ""),
             periodicidad=obligacion.get("periodicidad", ""),
-            cumplio=obligacion.get("cumplio", "Cumplió")
+            cumplio=obligacion.get("cumplio", "Cumplió"),
+            informes_aprobados_contexto=informes_aprobados_contexto
         )
         
         # Actualizar obligación con observación generada
