@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import uvicorn
     
 from src.routes import auth_routes
+from src.routes import section2_routes
 from src.services.database import connect_to_mongo, close_mongo_connection
 
 # # Cargar variables de entorno
@@ -58,7 +59,7 @@ app.add_middleware(
 
 # # Incluir rutas
 app.include_router(auth_routes.router, prefix="/api")
-
+app.include_router(section2_routes.router, prefix="/api")
 
 @app.get("/", tags=["Root"])
 async def root():

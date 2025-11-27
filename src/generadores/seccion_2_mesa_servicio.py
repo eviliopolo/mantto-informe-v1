@@ -1,18 +1,5 @@
-"""
-Generador Sección 2: Informe de Mesa de Servicio
-Tipo: 🟨 ANÁLISIS IA + 🟩 EXTRACCIÓN DATOS (GLPI)
-
-Subsecciones:
-- 2.1 Informe de Mesa de Servicio
-- 2.2 Herramientas de Trabajo
-- 2.3 Visitas de Diagnósticos a Subsistemas
-- 2.4 Informe Consolidado del Estado de los Tickets
-- 2.5 Escalamientos (ENEL, Caída Masiva, Conectividad)
-- 2.6 Informe Actualizado de Hojas de Vida
-- 2.7 Informe Ejecutivo del Estado del Sistema
-"""
 from docx import Document
-from docx.shared import Inches, Pt, Cm, RGBColor
+from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
@@ -45,35 +32,8 @@ class GeneradorSeccion2(GeneradorSeccion):
     def template_file(self) -> str:
         return "seccion_2_mesa_servicio.docx"
     
-    def __init__(self, anio: int, mes: int):
-        super().__init__(anio, mes)
-        self.datos: Dict[str, Any] = {}
-        self.doc: Optional[Document] = None
+    def __init__(self, ):        
         self.glpi_extractor = get_glpi_extractor()
-    
-    def _configurar_estilos(self):
-        """Configura los estilos del documento"""
-        style = self.doc.styles['Normal']
-        style.font.name = 'Arial'
-        style.font.size = Pt(11)
-        
-        h1 = self.doc.styles['Heading 1']
-        h1.font.name = 'Arial'
-        h1.font.size = Pt(14)
-        h1.font.bold = True
-        h1.font.color.rgb = self.COLOR_AZUL_OSCURO
-        
-        h2 = self.doc.styles['Heading 2']
-        h2.font.name = 'Arial'
-        h2.font.size = Pt(12)
-        h2.font.bold = True
-        h2.font.color.rgb = self.COLOR_AZUL_MEDIO
-        
-        h3 = self.doc.styles['Heading 3']
-        h3.font.name = 'Arial'
-        h3.font.size = Pt(11)
-        h3.font.bold = True
-        h3.font.color.rgb = self.COLOR_GRIS
     
     def _set_cell_shading(self, cell, color_hex: str):
         """Establece el color de fondo de una celda"""
@@ -182,8 +142,11 @@ class GeneradorSeccion2(GeneradorSeccion):
             "estado_sistema": f"""Al cierre del mes de {mes} de {anio}, el sistema de videovigilancia presenta un total de {self.datos.get('camaras_operativas', 0)} cámaras operativas de un total de {self.datos.get('total_camaras', 0)} puntos, lo que representa una disponibilidad del {self.datos.get('disponibilidad_porcentaje', 0):.2f}%. Se encuentran {self.datos.get('camaras_no_operativas', 0)} cámaras no operativas y {self.datos.get('camaras_mantenimiento', 0)} en proceso de mantenimiento.""",
         }
         
-        return plantillas.get(tipo, "")
-    
+        return plantillas.get(tipo, "")     
+
+    def _seccion_2(self):
+        return None
+
     def _seccion_2_1_mesa_servicio(self):
         """2.1 Informe de Mesa de Servicio"""
         self.doc.add_heading("2.1. INFORME DE MESA DE SERVICIO", level=2)
@@ -209,14 +172,14 @@ class GeneradorSeccion2(GeneradorSeccion):
         
         texto_fijo = """El contratista cuenta con las siguientes herramientas para la gestión y operación del contrato:
 
-• Sistema GLPI para la gestión de tickets e incidentes
-• Plataforma de monitoreo de disponibilidad de cámaras
-• Sistema VMS (Video Management System) para visualización de cámaras
-• Herramientas de comunicación (correo, Teams, WhatsApp corporativo)
-• Equipos de cómputo y dispositivos móviles para el personal de campo
-• Vehículos y motocicletas para desplazamiento del personal técnico
-• Equipos de medición y diagnóstico (multímetros, probadores de red, etc.)
-• Herramientas manuales y equipos de protección personal"""
+        • Sistema GLPI para la gestión de tickets e incidentes
+        • Plataforma de monitoreo de disponibilidad de cámaras
+        • Sistema VMS (Video Management System) para visualización de cámaras
+        • Herramientas de comunicación (correo, Teams, WhatsApp corporativo)
+        • Equipos de cómputo y dispositivos móviles para el personal de campo
+        • Vehículos y motocicletas para desplazamiento del personal técnico
+        • Equipos de medición y diagnóstico (multímetros, probadores de red, etc.)
+        • Herramientas manuales y equipos de protección personal"""
         
         self._agregar_parrafo(texto_fijo)
     
@@ -480,6 +443,7 @@ class GeneradorSeccion2(GeneradorSeccion):
         self.doc.add_heading("2. INFORME DE MESA DE SERVICIO", level=1)
         
         # Generar cada subsección
+        self._seccion_2()
         self._seccion_2_1_mesa_servicio()
         self._seccion_2_2_herramientas()
         self._seccion_2_3_visitas_diagnostico()
