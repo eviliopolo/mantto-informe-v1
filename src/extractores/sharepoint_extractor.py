@@ -575,6 +575,87 @@ class SharePointExtractor:
         
         return any(dom in dominio for dom in dominios_sharepoint)
     
+    def verificar_archivo_existe(self, ruta_sharepoint: str) -> bool:
+        """
+        Verifica si un archivo existe en SharePoint sin descargarlo
+        
+        Args:
+            ruta_sharepoint: Ruta relativa del archivo en SharePoint
+                            (ej: "11. 01SEP - 30SEP / 01 OBLIGACIONES GENERALES/ archivo.pdf")
+        
+        Returns:
+            True si el archivo existe, False en caso contrario
+        """
+        try:
+            # Obtener token OAuth para Microsoft Graph
+            token = self._obtener_token_oauth(usar_microsoft_graph=True)
+            if not token:
+                print("[WARNING] No se pudo obtener token OAuth para Microsoft Graph")
+                return False
+            
+            # Construir la URL para verificar la existencia del archivo
+            parsed = urlparse(self.site_url)
+            hostname = parsed.netloc
+            
+            # Obtener site-id
+            site_path_parts = [p for p in parsed.path.split('/') if p]
+            site_path_for_graph = '/' + '/'.join(site_path_parts)
+            
+            site_response = requests.get(
+                f"https://graph.microsoft.com/v1.0/sites/{hostname}:/{quote(site_path_for_graph, safe='')}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            site_response.raise_for_status()
+            site_id = site_response.json()["id"]
+            
+            # Obtener drive-id
+            drive_response = requests.get(
+                f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            drive_response.raise_for_status()
+            drive_id = drive_response.json()["value"][0]["id"]  # Asume un solo drive
+            
+            # Construir la ruta del item en el drive
+            normalized_sharepoint_path = ruta_sharepoint.replace(" / ", "/").replace(" /", "/").replace("/ ", "/")
+            
+            # Construir ruta completa
+            full_file_path_parts = []
+            if self.base_path:
+                full_file_path_parts.extend(self.base_path.split('/'))
+            full_file_path_parts.extend(normalized_sharepoint_path.split('/'))
+            
+            # Eliminar partes vacías
+            full_file_path_parts = [p for p in full_file_path_parts if p]
+            
+            # Reconstruir la ruta relativa al root del drive
+            file_item_path = "/" + "/".join(full_file_path_parts)
+            
+            # Realizar HEAD request para verificar existencia
+            file_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:{quote(file_item_path, safe='')}"
+            
+            headers = {"Authorization": f"Bearer {token}"}
+            head_response = requests.head(file_url, headers=headers)
+            
+            if head_response.status_code == 200:
+                print(f"[INFO] Archivo existe en SharePoint: {ruta_sharepoint}")
+                return True
+            elif head_response.status_code == 404:
+                print(f"[WARNING] Archivo NO existe en SharePoint: {ruta_sharepoint}")
+                return False
+            else:
+                print(f"[WARNING] Error al verificar archivo en SharePoint (status {head_response.status_code}): {ruta_sharepoint}")
+                return False
+        
+        except requests.exceptions.RequestException as e:
+            print(f"[WARNING] Error de red o HTTP al verificar archivo en SharePoint: {e}")
+            return False
+        except Exception as e:
+            print(f"[WARNING] Error inesperado al verificar archivo en SharePoint: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     def buscar_archivo_por_nombre(self, nombre_archivo: str, carpeta_base: str = "/") -> Optional[str]:
         """
         Busca un archivo en SharePoint por nombre
