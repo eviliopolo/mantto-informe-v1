@@ -262,11 +262,14 @@ class ObligacionesService:
         """
         Procesa obligaciones de anexos verificando existencia de archivos en SharePoint
         
+        Solo verifica si el archivo existe y retorna formato simplificado.
+        No genera observaciones con LLM.
+        
         Args:
             obligaciones: Lista de obligaciones de anexos
             
         Returns:
-            Diccionario con obligaciones y estado de existencia de archivos
+            Diccionario con formato simplificado: solo archivo_existe y anexo
         """
         from src.extractores.sharepoint_extractor import get_sharepoint_extractor
         import config
@@ -276,22 +279,40 @@ class ObligacionesService:
         resultado = []
         
         for obligacion in obligaciones:
-            obligacion_resultado = obligacion.copy()
             ruta_anexo = obligacion.get("anexo", "")
             
             # Verificar existencia del archivo
             archivo_existe = False
+            mensaje_anexo = ""
+            
             if ruta_anexo and ruta_anexo != "-" and ruta_anexo.lower() != "no aplica":
                 try:
+                    logger.info(f"Verificando existencia del archivo: {ruta_anexo}")
                     # Intentar verificar existencia en SharePoint
                     archivo_existe = sharepoint_extractor.verificar_archivo_existe(ruta_anexo)
+                    
+                    if archivo_existe:
+                        mensaje_anexo = ruta_anexo  # Si existe, poner la ruta completa
+                        logger.info(f"✓ Archivo encontrado: {ruta_anexo}")
+                    else:
+                        mensaje_anexo = "Archivo no existe"  # Si no existe, mensaje fijo
+                        logger.warning(f"✗ Archivo no encontrado: {ruta_anexo}")
+                        
                 except Exception as e:
-                    logger.warning(f"Error al verificar archivo {ruta_anexo}: {e}")
+                    logger.error(f"Error al verificar archivo {ruta_anexo}: {e}")
                     archivo_existe = False
+                    mensaje_anexo = "Archivo no existe"  # En caso de error, considerar como no existe
+            else:
+                mensaje_anexo = "Archivo no existe"
+                logger.info(f"⚠ No se especificó ruta de anexo")
             
-            obligacion_resultado["archivo_existe"] = archivo_existe
-            obligacion_resultado["ruta_anexo"] = ruta_anexo
-            resultado.append(obligacion_resultado)
+            # Formato simplificado: solo archivo_existe y anexo
+            resultado.append({
+                "archivo_existe": archivo_existe,
+                "anexo": mensaje_anexo
+            })
+        
+        logger.info(f"Procesadas {len(resultado)} obligaciones de anexos. Archivos encontrados: {sum(1 for r in resultado if r.get('archivo_existe', False))}")
         
         return {
             "obligaciones_anexos": resultado
