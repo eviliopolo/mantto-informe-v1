@@ -381,19 +381,35 @@ OBSERVACIÓN:"""
                 # Verificar existencia del archivo antes de intentar extraer
                 archivo_existe = False
                 archivo_temp_descargado = None
+                es_sharepoint = False
                 
                 if isinstance(ruta_completa, str):
-                    # Si es URL de SharePoint o ruta relativa, intentar descargar para verificar existencia
+                    # Si es URL de SharePoint o ruta relativa, verificar existencia primero
                     if self.sharepoint_extractor.es_url_sharepoint(ruta_completa) or ruta_completa.startswith('/sites/') or ruta_completa.startswith('/teams/'):
-                        # Para SharePoint, intentar descargar (el método descargar_archivo retorna None si no existe)
+                        es_sharepoint = True
+                        # Para SharePoint, verificar existencia sin descargar primero
                         print(f"[INFO] Verificando existencia del archivo en SharePoint...")
-                        archivo_temp_descargado = self.sharepoint_extractor.descargar_archivo(ruta_completa)
-                        if archivo_temp_descargado and archivo_temp_descargado.exists():
-                            archivo_existe = True
-                            # Guardar referencia para limpiar después
-                            self.archivos_temporales.append(archivo_temp_descargado)
-                            # Usar el archivo descargado para extraer texto
-                            ruta_completa = str(archivo_temp_descargado)
+                        # Intentar verificar con el método optimizado
+                        try:
+                            archivo_existe = self.sharepoint_extractor.verificar_archivo_existe(ruta_anexo)
+                        except Exception as e:
+                            print(f"[WARNING] Error al verificar archivo en SharePoint: {e}")
+                            # Fallback: intentar descargar para verificar
+                            archivo_temp_descargado = self.sharepoint_extractor.descargar_archivo(ruta_completa)
+                            archivo_existe = archivo_temp_descargado is not None and archivo_temp_descargado.exists()
+                        
+                        if archivo_existe:
+                            print(f"[INFO] Archivo existe en SharePoint, descargando...")
+                            # Descargar el archivo para extraer texto
+                            archivo_temp_descargado = self.sharepoint_extractor.descargar_archivo(ruta_completa)
+                            if archivo_temp_descargado and archivo_temp_descargado.exists():
+                                # Guardar referencia para limpiar después
+                                self.archivos_temporales.append(archivo_temp_descargado)
+                                # Usar el archivo descargado para extraer texto
+                                ruta_completa = str(archivo_temp_descargado)
+                            else:
+                                print(f"[WARNING] No se pudo descargar el archivo aunque existe")
+                                archivo_existe = False
                         else:
                             print(f"[WARNING] El archivo no existe en SharePoint: {ruta_anexo}")
                     else:
@@ -417,29 +433,49 @@ OBSERVACIÓN:"""
                     if len(texto_anexo) == 0:
                         print(f"[WARNING] No se pudo extraer texto del anexo (archivo puede estar vacío o corrupto)")
                 else:
-                    # Archivo no existe: verificar si hay observación por defecto
+                    # Archivo no existe: si revisaranexo=true, generar observación indicando que no existe
                     print(f"[WARNING] El archivo de anexo no existe: {ruta_anexo}")
+                    if revisar_anexo:
+                        # Si debe revisar anexo y no existe, generar observación indicando que no existe
+                        observacion_archivo_no_existe = f"El archivo de anexo no existe: {ruta_anexo}"
+                        print(f"[INFO] Generando observación indicando que el archivo no existe")
+                        obligacion_actualizada = obligacion.copy()
+                        obligacion_actualizada["observaciones"] = observacion_archivo_no_existe
+                        obligacion_actualizada["observacion_generada_llm"] = False
+                        return obligacion_actualizada
+                    else:
+                        # Si no debe revisar anexo, usar defaultobservaciones
+                        default_observaciones = obligacion.get("defaultobservaciones", "")
+                        if default_observaciones:
+                            print(f"[INFO] Usando observación por defecto ya que el archivo no existe")
+                            obligacion_actualizada = obligacion.copy()
+                            obligacion_actualizada["observaciones"] = default_observaciones
+                            obligacion_actualizada["observacion_generada_llm"] = False
+                            return obligacion_actualizada
+                        else:
+                            print(f"[INFO] Continuando con revisión usando fallback (no hay defaultobservaciones)")
+            else:
+                # No se pudo resolver la ruta: si revisaranexo=true, generar observación indicando que no existe
+                print(f"[WARNING] No se pudo resolver ruta del anexo: {ruta_anexo}")
+                if revisar_anexo:
+                    # Si debe revisar anexo y no se pudo resolver, generar observación indicando que no existe
+                    observacion_archivo_no_existe = f"El archivo de anexo no existe: {ruta_anexo}"
+                    print(f"[INFO] Generando observación indicando que el archivo no existe (ruta no resuelta)")
+                    obligacion_actualizada = obligacion.copy()
+                    obligacion_actualizada["observaciones"] = observacion_archivo_no_existe
+                    obligacion_actualizada["observacion_generada_llm"] = False
+                    return obligacion_actualizada
+                else:
+                    # Si no debe revisar anexo, usar defaultobservaciones
                     default_observaciones = obligacion.get("defaultobservaciones", "")
                     if default_observaciones:
-                        print(f"[INFO] Usando observación por defecto ya que el archivo no existe")
+                        print(f"[INFO] Usando observación por defecto ya que no se pudo resolver la ruta")
                         obligacion_actualizada = obligacion.copy()
                         obligacion_actualizada["observaciones"] = default_observaciones
                         obligacion_actualizada["observacion_generada_llm"] = False
                         return obligacion_actualizada
                     else:
                         print(f"[INFO] Continuando con revisión usando fallback (no hay defaultobservaciones)")
-            else:
-                # No se pudo resolver la ruta: verificar si hay observación por defecto
-                print(f"[WARNING] No se pudo resolver ruta del anexo: {ruta_anexo}")
-                default_observaciones = obligacion.get("defaultobservaciones", "")
-                if default_observaciones:
-                    print(f"[INFO] Usando observación por defecto ya que no se pudo resolver la ruta")
-                    obligacion_actualizada = obligacion.copy()
-                    obligacion_actualizada["observaciones"] = default_observaciones
-                    obligacion_actualizada["observacion_generada_llm"] = False
-                    return obligacion_actualizada
-                else:
-                    print(f"[INFO] Continuando con revisión usando fallback (no hay defaultobservaciones)")
         else:
             print(f"[INFO] No hay anexo para la obligación {obligacion.get('item', 'N/A')} (ruta: '{ruta_anexo}')")
             # Si no hay anexo pero hay defaultobservaciones, usarlas
