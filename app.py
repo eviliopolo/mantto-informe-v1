@@ -12,6 +12,7 @@ import uvicorn
 from src.routes import auth_routes
 from src.routes import section2_routes
 from src.services.database import connect_to_mongo, close_mongo_connection
+from src.services.glpi_service import close_glpi_service
 
 # # Cargar variables de entorno
 load_dotenv()
@@ -32,10 +33,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Iniciando aplicación...")
     await connect_to_mongo()
+    # GLPI se conecta bajo demanda (lazy connection)
     yield
     # Shutdown
     logger.info("Cerrando aplicación...")
     await close_mongo_connection()
+    await close_glpi_service()
 
 
 # Crear aplicación FastAPI

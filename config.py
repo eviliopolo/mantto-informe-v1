@@ -96,9 +96,12 @@ def get_periodo_texto(anio: int, mes: int) -> str:
     """Retorna el periodo en formato texto: 'Septiembre de 2025'"""
     return f"{MESES[mes]} de {anio}"
 
-# Configuración GLPI
-GLPI_API_URL = "https://glpi.etb.com.co/apirest.php"
-GLPI_API_TOKEN = "TU_TOKEN_AQUI"  # TODO: Configurar token real o usar variable de entorno
+# Configuración GLPI MySQL
+GLPI_MYSQL_HOST = os.getenv("GLPI_MYSQL_HOST", "")
+GLPI_MYSQL_PORT = int(os.getenv("GLPI_MYSQL_PORT", "3306"))
+GLPI_MYSQL_USER = os.getenv("GLPI_MYSQL_USER", "")
+GLPI_MYSQL_PASSWORD = os.getenv("GLPI_MYSQL_PASSWORD", "")
+GLPI_MYSQL_DATABASE = os.getenv("GLPI_MYSQL_DATABASE", "glpi")
 
 # Lista de meses en español (para compatibilidad)
 MESES_LISTA = [
