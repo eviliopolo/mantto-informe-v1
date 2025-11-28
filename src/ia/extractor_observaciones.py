@@ -329,70 +329,106 @@ OBSERVACIÓN:"""
             return {"fecha": None, "asunto": None}
         
         try:
-            prompt = f"""Eres un asistente que extrae información estructurada de documentos de comunicados oficiales.
+            # Limitar texto a 8000 caracteres para asegurar que capture el encabezado completo
+            texto_limitado = texto_archivo[:8000]
+            
+            print(f"[DEBUG] ========== EXTRACCIÓN FECHA Y ASUNTO CON LLM ==========")
+            print(f"[DEBUG] Longitud del texto completo: {len(texto_archivo)} caracteres")
+            print(f"[DEBUG] Longitud del texto enviado al LLM: {len(texto_limitado)} caracteres")
+            print(f"[DEBUG] Primeros 500 caracteres del texto:")
+            print(f"{texto_limitado[:500]}")
+            print(f"[DEBUG] ======================================================")
+            
+            prompt = f"""Eres un asistente experto en extraer información estructurada de documentos oficiales y comunicados.
 
 TEXTO DEL DOCUMENTO:
-{texto_archivo[:6000]}  # Limitar a 6000 caracteres
+{texto_limitado}
 
 INSTRUCCIONES:
-1. Busca la FECHA en el encabezado del documento. La fecha puede estar en formato DD/MM/YYYY, DD-MM-YYYY, o similar.
-2. Busca el ASUNTO del comunicado. El asunto generalmente aparece después de "ASUNTO:", "REFERENCIA:", o en una línea destacada del encabezado.
-3. Si no encuentras la fecha o el asunto, retorna null para ese campo.
+1. Busca la FECHA en el encabezado del documento (primeras 20-30 líneas). La fecha puede estar en formato DD/MM/YYYY, DD-MM-YYYY, DD de MES de YYYY, o similar.
+2. Busca el ASUNTO del comunicado. El asunto generalmente aparece después de palabras clave como "ASUNTO:", "REFERENCIA:", "TEMA:", o en una línea destacada del encabezado.
+3. Si encuentras la fecha, conviértela al formato DD/MM/YYYY.
+4. Si encuentras el asunto, extrae el texto completo del asunto.
+5. Si no encuentras la fecha o el asunto, retorna null para ese campo.
 
 IMPORTANTE:
-- La fecha debe estar en el ENCABEZADO del documento (primeras líneas)
-- El asunto debe ser el tema principal del comunicado
-- Retorna SOLO un JSON válido con esta estructura exacta:
+- La fecha debe estar en el ENCABEZADO del documento (primeras líneas, antes del cuerpo del texto)
+- El asunto debe ser el tema principal del comunicado, generalmente en mayúsculas o destacado
+- Retorna SOLO un JSON válido con esta estructura exacta (sin comillas adicionales ni markdown):
 {{
     "fecha": "DD/MM/YYYY" o null,
     "asunto": "Texto del asunto completo" o null
 }}
 
-No agregues explicaciones, solo el JSON."""
+Retorna únicamente el JSON, sin explicaciones ni texto adicional."""
 
+            print(f"[DEBUG] Enviando petición a OpenAI con modelo: {self.model}")
+            
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "Eres un asistente experto en extraer información estructurada de documentos. Siempre respondes con JSON válido."},
+                    {"role": "system", "content": "Eres un asistente experto en extraer información estructurada de documentos oficiales. Siempre respondes ÚNICAMENTE con JSON válido, sin explicaciones, sin markdown, sin texto adicional."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=200,
-                temperature=0.1  # Muy baja temperatura para extracción precisa
+                max_tokens=300,  # Aumentado para permitir asuntos más largos
+                temperature=0.0  # Temperatura 0 para máxima precisión
             )
             
             respuesta_texto = response.choices[0].message.content.strip()
+            
+            print(f"[DEBUG] Respuesta completa del LLM:")
+            print(f"{respuesta_texto}")
+            print(f"[DEBUG] ======================================================")
             
             # Intentar parsear JSON de la respuesta
             import json
             import re
             
             # Limpiar la respuesta (puede tener markdown o texto adicional)
-            respuesta_texto = respuesta_texto.strip()
-            if respuesta_texto.startswith("```json"):
-                respuesta_texto = respuesta_texto[7:]
-            if respuesta_texto.startswith("```"):
-                respuesta_texto = respuesta_texto[3:]
-            if respuesta_texto.endswith("```"):
-                respuesta_texto = respuesta_texto[:-3]
-            respuesta_texto = respuesta_texto.strip()
+            respuesta_limpia = respuesta_texto.strip()
             
-            # Buscar JSON en la respuesta
-            json_match = re.search(r'\{[^}]+\}', respuesta_texto)
+            # Remover markdown code blocks
+            if respuesta_limpia.startswith("```json"):
+                respuesta_limpia = respuesta_limpia[7:]
+            elif respuesta_limpia.startswith("```"):
+                respuesta_limpia = respuesta_limpia[3:]
+            if respuesta_limpia.endswith("```"):
+                respuesta_limpia = respuesta_limpia[:-3]
+            respuesta_limpia = respuesta_limpia.strip()
+            
+            # Buscar JSON en la respuesta usando un regex más robusto
+            # Buscar desde la primera { hasta la última }
+            json_match = re.search(r'\{.*\}', respuesta_limpia, re.DOTALL)
             if json_match:
-                respuesta_texto = json_match.group(0)
+                respuesta_limpia = json_match.group(0)
             
-            resultado = json.loads(respuesta_texto)
+            print(f"[DEBUG] JSON extraído: {respuesta_limpia}")
+            
+            resultado = json.loads(respuesta_limpia)
+            
+            fecha = resultado.get("fecha")
+            asunto = resultado.get("asunto")
+            
+            print(f"[DEBUG] Fecha extraída: {fecha}")
+            print(f"[DEBUG] Asunto extraído: {asunto[:100] if asunto else None}...")
+            
             return {
-                "fecha": resultado.get("fecha"),
-                "asunto": resultado.get("asunto")
+                "fecha": fecha,
+                "asunto": asunto
             }
             
         except json.JSONDecodeError as e:
-            print(f"[WARNING] Error al parsear JSON de LLM para fecha/asunto: {e}")
-            print(f"[DEBUG] Respuesta recibida: {respuesta_texto[:200]}")
+            print(f"[ERROR] Error al parsear JSON de LLM para fecha/asunto: {e}")
+            print(f"[ERROR] Respuesta completa recibida: {respuesta_texto}")
+            print(f"[ERROR] JSON intentado: {respuesta_limpia if 'respuesta_limpia' in locals() else 'N/A'}")
+            import traceback
+            traceback.print_exc()
             return {"fecha": None, "asunto": None}
         except Exception as e:
-            print(f"[WARNING] Error al extraer fecha/asunto con LLM: {e}")
+            print(f"[ERROR] Error al extraer fecha/asunto con LLM: {e}")
+            print(f"[ERROR] Respuesta recibida: {respuesta_texto if 'respuesta_texto' in locals() else 'N/A'}")
+            import traceback
+            traceback.print_exc()
             return {"fecha": None, "asunto": None}
     
     def _generar_observacion_fallback(self, obligacion: str, cumplio: str) -> str:

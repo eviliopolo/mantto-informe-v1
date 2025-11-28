@@ -156,19 +156,42 @@ class ComunicadosEmitidosService:
             asunto = None
             
             try:
-                # Usar el método extraer_texto_archivo que maneja automáticamente la descarga desde SharePoint
-                # El método detecta si es una ruta de SharePoint y la descarga automáticamente
-                texto_archivo = self.extractor_observaciones.extraer_texto_archivo(ruta_completa)
+                # Obtener la ruta de SharePoint si está disponible, sino construirla
+                ruta_sharepoint = archivo_info.get("ruta_sharepoint")
                 
-                if texto_archivo:
+                if not ruta_sharepoint:
+                    # Construir la ruta completa de SharePoint para descargar el archivo
+                    # La ruta_completa viene como: "PROYECTOS/Año 2024/.../archivo.pdf"
+                    # Necesitamos construir la ruta relativa del servidor: "/sites/OPERACIONES/Shared Documents/..."
+                    from urllib.parse import urlparse
+                    parsed = urlparse(self.sharepoint_extractor.site_url)
+                    site_path_parts = [p for p in parsed.path.split('/') if p]
+                    site_path = '/' + '/'.join(site_path_parts)  # ej: /sites/OPERACIONES
+                    
+                    # Construir ruta relativa del servidor completa
+                    # Formato: /sites/OPERACIONES/Shared Documents/PROYECTOS/...
+                    ruta_sharepoint = f"{site_path}/Shared Documents/{ruta_completa}"
+                
+                logger.info(f"[DEBUG] Extrayendo texto del archivo: {nombre_archivo}")
+                logger.info(f"[DEBUG] Ruta completa relativa: {ruta_completa}")
+                logger.info(f"[DEBUG] Ruta SharePoint (server relative): {ruta_sharepoint}")
+                
+                # Usar el método que descarga desde SharePoint directamente
+                texto_archivo = self.extractor_observaciones._extraer_texto_desde_sharepoint(ruta_sharepoint)
+                
+                if texto_archivo and len(texto_archivo.strip()) > 50:
+                    logger.info(f"[DEBUG] Texto extraído exitosamente: {len(texto_archivo)} caracteres")
+                    logger.info(f"[DEBUG] Primeros 300 caracteres: {texto_archivo[:300]}")
+                    
                     # Usar LLM para extraer fecha y asunto
                     resultado_llm = self.extractor_observaciones.extraer_fecha_y_asunto_comunicado(texto_archivo)
                     fecha = resultado_llm.get("fecha")
                     asunto = resultado_llm.get("asunto")
                     
-                    logger.info(f"Procesado archivo {nombre_archivo}: fecha={fecha}, asunto={asunto[:50] if asunto else None}...")
+                    logger.info(f"[SUCCESS] Procesado archivo {nombre_archivo}: fecha={fecha}, asunto={asunto[:100] if asunto else None}...")
                 else:
-                    logger.warning(f"No se pudo extraer texto del archivo: {nombre_archivo}")
+                    logger.warning(f"[WARNING] No se pudo extraer texto del archivo o texto muy corto: {nombre_archivo}")
+                    logger.warning(f"[WARNING] Longitud del texto: {len(texto_archivo) if texto_archivo else 0} caracteres")
             
             except Exception as e:
                 logger.error(f"Error al procesar archivo {nombre_archivo}: {e}")

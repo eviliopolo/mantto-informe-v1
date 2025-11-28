@@ -892,9 +892,13 @@ class SharePointExtractor:
                 for item in items:
                     # Solo incluir archivos, no carpetas
                     if 'file' in item:
+                        # Construir ruta completa relativa al drive (sin "Shared Documents")
+                        ruta_archivo = f"{ruta_normalizada}/{item.get('name', '')}" if ruta_normalizada else item.get('name', '')
+                        
                         archivos.append({
                             "nombre": item.get('name', ''),
-                            "ruta_completa": ruta_normalizada + '/' + item.get('name', ''),
+                            "ruta_completa": ruta_archivo,  # Ruta relativa al drive root
+                            "ruta_sharepoint": f"/sites/{site_path_parts[-1]}/Shared Documents/{ruta_archivo}" if site_path_parts else f"/Shared Documents/{ruta_archivo}",
                             "tamaño": item.get('size', 0),
                             "fecha_modificacion": item.get('lastModifiedDateTime', ''),
                             "id": item.get('id', ''),
