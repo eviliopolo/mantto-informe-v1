@@ -308,6 +308,93 @@ OBSERVACIÓN:"""
             print(f"[WARNING] Error al generar observación con LLM: {e}")
             return self._generar_observacion_fallback(obligacion, cumplio)
     
+    def extraer_fecha_y_asunto_comunicado(self, texto_archivo: str) -> Dict[str, Optional[str]]:
+        """
+        Extrae la fecha del encabezado y el asunto de un comunicado usando LLM
+        
+        Args:
+            texto_archivo: Texto extraído del archivo del comunicado
+        
+        Returns:
+            Diccionario con:
+            {
+                "fecha": "DD/MM/YYYY" o None,
+                "asunto": "Texto del asunto" o None
+            }
+        """
+        if not self.client or not OPENAI_DISPONIBLE:
+            return {"fecha": None, "asunto": None}
+        
+        if not texto_archivo or len(texto_archivo.strip()) < 50:
+            return {"fecha": None, "asunto": None}
+        
+        try:
+            prompt = f"""Eres un asistente que extrae información estructurada de documentos de comunicados oficiales.
+
+TEXTO DEL DOCUMENTO:
+{texto_archivo[:6000]}  # Limitar a 6000 caracteres
+
+INSTRUCCIONES:
+1. Busca la FECHA en el encabezado del documento. La fecha puede estar en formato DD/MM/YYYY, DD-MM-YYYY, o similar.
+2. Busca el ASUNTO del comunicado. El asunto generalmente aparece después de "ASUNTO:", "REFERENCIA:", o en una línea destacada del encabezado.
+3. Si no encuentras la fecha o el asunto, retorna null para ese campo.
+
+IMPORTANTE:
+- La fecha debe estar en el ENCABEZADO del documento (primeras líneas)
+- El asunto debe ser el tema principal del comunicado
+- Retorna SOLO un JSON válido con esta estructura exacta:
+{{
+    "fecha": "DD/MM/YYYY" o null,
+    "asunto": "Texto del asunto completo" o null
+}}
+
+No agregues explicaciones, solo el JSON."""
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "Eres un asistente experto en extraer información estructurada de documentos. Siempre respondes con JSON válido."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=200,
+                temperature=0.1  # Muy baja temperatura para extracción precisa
+            )
+            
+            respuesta_texto = response.choices[0].message.content.strip()
+            
+            # Intentar parsear JSON de la respuesta
+            import json
+            import re
+            
+            # Limpiar la respuesta (puede tener markdown o texto adicional)
+            respuesta_texto = respuesta_texto.strip()
+            if respuesta_texto.startswith("```json"):
+                respuesta_texto = respuesta_texto[7:]
+            if respuesta_texto.startswith("```"):
+                respuesta_texto = respuesta_texto[3:]
+            if respuesta_texto.endswith("```"):
+                respuesta_texto = respuesta_texto[:-3]
+            respuesta_texto = respuesta_texto.strip()
+            
+            # Buscar JSON en la respuesta
+            json_match = re.search(r'\{[^}]+\}', respuesta_texto)
+            if json_match:
+                respuesta_texto = json_match.group(0)
+            
+            resultado = json.loads(respuesta_texto)
+            return {
+                "fecha": resultado.get("fecha"),
+                "asunto": resultado.get("asunto")
+            }
+            
+        except json.JSONDecodeError as e:
+            print(f"[WARNING] Error al parsear JSON de LLM para fecha/asunto: {e}")
+            print(f"[DEBUG] Respuesta recibida: {respuesta_texto[:200]}")
+            return {"fecha": None, "asunto": None}
+        except Exception as e:
+            print(f"[WARNING] Error al extraer fecha/asunto con LLM: {e}")
+            return {"fecha": None, "asunto": None}
+    
     def _generar_observacion_fallback(self, obligacion: str, cumplio: str) -> str:
         """
         Genera observación genérica cuando no hay LLM disponible

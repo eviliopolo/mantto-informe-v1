@@ -511,7 +511,13 @@ class SharePointExtractor:
             response = requests.post(token_url, data=data)
             
             if response.status_code != 200:
-                print(f"[ERROR] Error al obtener token OAuth: {response.status_code}")
+                print(f"[ERROR] ========== ERROR AL OBTENER TOKEN OAUTH ==========")
+                print(f"[ERROR] Status Code: {response.status_code}")
+                print(f"[ERROR] Token URL: {token_url}")
+                print(f"[ERROR] Client ID: {self.client_id[:20]}..." if self.client_id else "[ERROR] Client ID: None")
+                print(f"[ERROR] Client Secret: {'***' if self.client_secret else 'None'}")
+                print(f"[ERROR] Tenant: {tenant}")
+                print(f"[ERROR] Scope: {scope}")
                 try:
                     error_detail = response.json()
                     print(f"[ERROR] Detalle del error: {error_detail}")
@@ -522,6 +528,7 @@ class SharePointExtractor:
                         print(f"[ERROR] Tipo de error: {error_detail['error']}")
                 except:
                     print(f"[ERROR] Respuesta: {response.text[:500]}")
+                print(f"[ERROR] =================================================")
                 
                 print(f"[DEBUG] Información de la solicitud:")
                 print(f"  - Tenant: {tenant}")
@@ -535,8 +542,14 @@ class SharePointExtractor:
             token_data = response.json()
             access_token = token_data.get("access_token")
             if access_token:
-                print(f"[INFO] Token OAuth obtenido exitosamente")
-                print(f"[DEBUG] Token expira en: {token_data.get('expires_in', 'N/A')} segundos")
+                print(f"[SUCCESS] ========== TOKEN OAUTH OBTENIDO EXITOSAMENTE ==========")
+                print(f"[SUCCESS] Token obtenido (longitud: {len(access_token)} caracteres)")
+                print(f"[SUCCESS] Token (primeros 30 caracteres): {access_token[:30]}...")
+                print(f"[SUCCESS] Token expira en: {token_data.get('expires_in', 'N/A')} segundos")
+                print(f"[SUCCESS] ======================================================")
+            else:
+                print(f"[ERROR] No se encontró access_token en la respuesta")
+                print(f"[ERROR] Respuesta recibida: {token_data}")
             return access_token
             
         except Exception as e:
@@ -670,6 +683,239 @@ class SharePointExtractor:
         # TODO: Implementar búsqueda en SharePoint
         # Por ahora retorna None
         return None
+    
+    def listar_archivos_en_carpeta(self, ruta_carpeta: str) -> List[Dict[str, Any]]:
+        """
+        Lista todos los archivos en una carpeta de SharePoint usando Microsoft Graph API
+        
+        Args:
+            ruta_carpeta: Ruta relativa de la carpeta en SharePoint
+                         (ej: "01SEP - 30SEP / 01 OBLIGACIONES GENERALES / OBLIGACIÓN 7 y 10 / COMUNICADOS EMITIDOS")
+        
+        Returns:
+            Lista de diccionarios con información de cada archivo:
+            [
+                {
+                    "nombre": "archivo.pdf",
+                    "ruta_completa": "ruta/completa/archivo.pdf",
+                    "tamaño": 12345,
+                    "fecha_modificacion": "2025-09-15T10:30:00Z",
+                    "id": "file-id-from-graph"
+                },
+                ...
+            ]
+        """
+        try:
+            # Mostrar información de configuración
+            print("=" * 80)
+            print("[DEBUG] CONFIGURACIÓN SHAREPOINT:")
+            print(f"[DEBUG] Site URL: {self.site_url}")
+            print(f"[DEBUG] Base Path: '{self.base_path}'")
+            print(f"[DEBUG] Client ID: {self.client_id[:20]}..." if self.client_id else "[DEBUG] Client ID: None")
+            print(f"[DEBUG] Tenant ID: {self.tenant_id}")
+            print(f"[DEBUG] Ruta carpeta recibida: '{ruta_carpeta}'")
+            print("=" * 80)
+            
+            # Construir ruta completa si hay base_path
+            # IMPORTANTE: El base_path puede incluir "Shared Documents" o no
+            # Cuando usamos /root:/ruta:/children, la ruta debe ser relativa al drive root
+            # Si el base_path incluye "Shared Documents", debemos removerlo
+            ruta_completa = ruta_carpeta
+            print(f"[DEBUG] ========== CONSTRUCCIÓN DE RUTA ==========")
+            print(f"[DEBUG] Ruta carpeta recibida: '{ruta_carpeta}'")
+            print(f"[DEBUG] Base Path configurado: '{self.base_path}'")
+            
+            if self.base_path:
+                # Normalizar base_path: remover "Shared Documents" si está al inicio
+                base = self.base_path.rstrip('/').rstrip(' ')
+                if base.startswith('Shared Documents/'):
+                    base = base[len('Shared Documents/'):]
+                elif base.startswith('Shared Documents'):
+                    base = base[len('Shared Documents'):].lstrip('/')
+                
+                # Combinar base_path con ruta de carpeta
+                carpeta = ruta_carpeta.lstrip('/').lstrip(' ')
+                # Normalizar separadores
+                base = base.replace(' / ', '/').replace(' /', '/').replace('/ ', '/')
+                carpeta = carpeta.replace(' / ', '/').replace(' /', '/').replace('/ ', '/')
+                
+                ruta_completa = f"{base}/{carpeta}" if base and carpeta else (base or carpeta)
+                print(f"[DEBUG] Base Path normalizado (sin 'Shared Documents'): '{base}'")
+                print(f"[DEBUG] Ruta completa construida: '{ruta_completa}'")
+            else:
+                print(f"[DEBUG] No hay base_path configurado, usando ruta directa")
+                print(f"[DEBUG] Ruta final: '{ruta_completa}'")
+            print(f"[DEBUG] =========================================")
+            
+            # Obtener token OAuth para Microsoft Graph
+            print("[DEBUG] Obteniendo token OAuth para Microsoft Graph...")
+            token = self._obtener_token_oauth(usar_microsoft_graph=True)
+            if not token:
+                print("[ERROR] No se pudo obtener token OAuth para Microsoft Graph")
+                print("[ERROR] Verifica las credenciales en .env:")
+                print("[ERROR]   - SHAREPOINT_CLIENT_ID")
+                print("[ERROR]   - SHAREPOINT_CLIENT_SECRET")
+                print("[ERROR]   - SHAREPOINT_TENANT_ID (opcional)")
+                return []
+            else:
+                print(f"[DEBUG] Token OAuth obtenido exitosamente (longitud: {len(token)} caracteres)")
+                print(f"[DEBUG] Token (primeros 20 caracteres): {token[:20]}...")
+            
+            # Construir la URL para obtener el site-id
+            parsed = urlparse(self.site_url)
+            hostname = parsed.netloc
+            site_path_parts = [p for p in parsed.path.split('/') if p]
+            site_path_for_graph = '/' + '/'.join(site_path_parts)
+            
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            }
+            
+            # Paso 1: Obtener site-id
+            site_response = requests.get(
+                f"https://graph.microsoft.com/v1.0/sites/{hostname}:/{quote(site_path_for_graph, safe='')}",
+                headers=headers
+            )
+            
+            if site_response.status_code != 200:
+                print(f"[ERROR] No se pudo obtener site-id (status {site_response.status_code})")
+                return []
+            
+            site_data = site_response.json()
+            site_id = site_data.get('id')
+            if not site_id:
+                print("[ERROR] No se encontró site-id en la respuesta")
+                return []
+            
+            # Paso 2: Obtener drive-id
+            drives_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives"
+            drives_response = requests.get(drives_url, headers=headers)
+            
+            if drives_response.status_code != 200:
+                print(f"[ERROR] No se pudo obtener drive-id (status {drives_response.status_code})")
+                return []
+            
+            drives_data = drives_response.json()
+            drives = drives_data.get('value', [])
+            if not drives:
+                print("[ERROR] No se encontraron drives en el sitio")
+                return []
+            
+            # Buscar el drive de "Shared Documents" o usar el primero
+            drive_id = None
+            for drive in drives:
+                if drive.get('name') == 'Documents' or 'Shared Documents' in drive.get('name', ''):
+                    drive_id = drive.get('id')
+                    break
+            
+            if not drive_id:
+                drive_id = drives[0].get('id')
+            
+            # Paso 3: Construir la ruta completa para la carpeta
+            # La ruta debe ser relativa al drive root (no incluir "Shared Documents")
+            # Si hay base_path, combinarlo con la ruta de la carpeta
+            ruta_a_normalizar = ruta_completa if 'ruta_completa' in locals() and ruta_completa != ruta_carpeta else ruta_carpeta
+            
+            # Normalizar la ruta: reemplazar espacios alrededor de "/" y guiones
+            ruta_normalizada = ruta_a_normalizar.replace(' / ', '/').replace(' /', '/').replace('/ ', '/').strip()
+            
+            # Remover "Shared Documents" si está al inicio (ya estamos en el drive)
+            if ruta_normalizada.startswith('Shared Documents/'):
+                ruta_normalizada = ruta_normalizada[len('Shared Documents/'):]
+            elif ruta_normalizada.startswith('Shared Documents'):
+                ruta_normalizada = ruta_normalizada[len('Shared Documents'):].lstrip('/')
+            
+            print(f"[DEBUG] Ruta después de remover 'Shared Documents': '{ruta_normalizada}'")
+            
+            print(f"[DEBUG] Ruta original recibida: '{ruta_carpeta}'")
+            print(f"[DEBUG] Ruta normalizada: '{ruta_normalizada}'")
+            print(f"[DEBUG] Site ID: {site_id}")
+            print(f"[DEBUG] Drive ID: {drive_id}")
+            
+            # Paso 4: Listar archivos en la carpeta
+            # Usar el endpoint de children de la carpeta
+            # La ruta debe estar codificada correctamente para URL
+            ruta_codificada = quote(ruta_normalizada, safe='')
+            carpeta_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{ruta_codificada}:/children"
+            
+            print(f"[DEBUG] ========== URL FINAL PARA LISTAR ARCHIVOS ==========")
+            print(f"[DEBUG] Site ID: {site_id}")
+            print(f"[DEBUG] Drive ID: {drive_id}")
+            print(f"[DEBUG] Ruta normalizada: '{ruta_normalizada}'")
+            print(f"[DEBUG] Ruta codificada: '{ruta_codificada}'")
+            print(f"[DEBUG] URL completa: {carpeta_url}")
+            print(f"[DEBUG] Token presente en headers: {'Sí' if token else 'No'}")
+            print(f"[DEBUG] ====================================================")
+            
+            archivos = []
+            next_link = carpeta_url
+            
+            # Manejar paginación si hay muchos archivos
+            while next_link:
+                print(f"[DEBUG] Realizando petición GET a: {next_link}")
+                print(f"[DEBUG] Headers enviados:")
+                print(f"[DEBUG]   Authorization: Bearer {token[:30]}..." if token else "[DEBUG]   Authorization: None")
+                print(f"[DEBUG]   Accept: application/json")
+                
+                response = requests.get(next_link, headers=headers)
+                
+                print(f"[DEBUG] Respuesta recibida:")
+                print(f"[DEBUG]   Status Code: {response.status_code}")
+                if response.status_code != 200:
+                    print(f"[DEBUG]   Respuesta (primeros 500 chars): {response.text[:500]}")
+                
+                if response.status_code == 404:
+                    print(f"[ERROR] La carpeta no existe (404): '{ruta_normalizada}'")
+                    print(f"[ERROR] URL intentada: {next_link}")
+                    try:
+                        error_detail = response.json()
+                        print(f"[ERROR] Detalle del error: {error_detail}")
+                    except:
+                        print(f"[ERROR] Respuesta del servidor: {response.text[:500]}")
+                    return []
+                
+                if response.status_code != 200:
+                    print(f"[ERROR] No se pudieron listar archivos (status {response.status_code})")
+                    print(f"[ERROR] URL intentada: {next_link}")
+                    print(f"[ERROR] Ruta normalizada: '{ruta_normalizada}'")
+                    try:
+                        error_detail = response.json()
+                        print(f"[ERROR] Detalle del error: {error_detail}")
+                    except:
+                        print(f"[ERROR] Respuesta del servidor: {response.text[:500]}")
+                    return []
+                
+                data = response.json()
+                items = data.get('value', [])
+                
+                for item in items:
+                    # Solo incluir archivos, no carpetas
+                    if 'file' in item:
+                        archivos.append({
+                            "nombre": item.get('name', ''),
+                            "ruta_completa": ruta_normalizada + '/' + item.get('name', ''),
+                            "tamaño": item.get('size', 0),
+                            "fecha_modificacion": item.get('lastModifiedDateTime', ''),
+                            "id": item.get('id', ''),
+                            "web_url": item.get('webUrl', '')
+                        })
+                
+                # Verificar si hay más páginas
+                next_link = data.get('@odata.nextLink')
+            
+            print(f"[INFO] Se encontraron {len(archivos)} archivos en la carpeta '{ruta_normalizada}'")
+            if len(archivos) > 0:
+                print(f"[DEBUG] Primeros archivos encontrados:")
+                for i, archivo in enumerate(archivos[:5], 1):
+                    print(f"  {i}. {archivo.get('nombre', 'N/A')} - {archivo.get('ruta_completa', 'N/A')}")
+            return archivos
+            
+        except Exception as e:
+            print(f"[WARNING] Error al listar archivos en carpeta: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
 
 # Singleton

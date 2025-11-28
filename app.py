@@ -67,6 +67,13 @@ try:
 except Exception as e:
     logger.warning(f"No se pudieron incluir rutas de obligaciones: {e}")
 
+try:
+    from src.routes import comunicados_routes
+    app.include_router(comunicados_routes.router)
+    logger.info("✓ Rutas de comunicados incluidas")
+except Exception as e:
+    logger.warning(f"No se pudieron incluir rutas de comunicados: {e}")
+
 # Intentar incluir otras rutas si existen
 try:
     from src.routes import section1_routes
@@ -99,6 +106,7 @@ async def root():
         "docs": "/docs",
         "endpoints": {
             "obligaciones": "/api/obligaciones/procesar",
+            "comunicados": "/api/comunicados/emitidos",
             "swagger": "/docs",
             "redoc": "/redoc"
         }
