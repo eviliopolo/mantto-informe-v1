@@ -2,6 +2,7 @@
 Generador Sección 1: Información General del Contrato
 Tipo: 🟦 CONTENIDO FIJO (mayoría) + 🟩 EXTRACCIÓN (comunicados, personal)
 """
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import json
@@ -280,6 +281,14 @@ class GeneradorSeccion1(GeneradorSeccion):
             "personal_apoyo": self.personal_apoyo,
             "tabla_personal_minimo": self._formatear_personal_minimo(),
             "tabla_personal_apoyo": self._formatear_personal_apoyo(),
+            
+            # Marcadores para identificación de tablas (renderizan como [[TABLA_XXX]])
+            "TABLA_MARKER_OBLIGACIONES_GENERALES": "[[TABLA_OBLIGACIONES_GENERALES]]",
+            "TABLA_MARKER_OBLIGACIONES_ESPECIFICAS": "[[TABLA_OBLIGACIONES_ESPECIFICAS]]",
+            "TABLA_MARKER_OBLIGACIONES_AMBIENTALES": "[[TABLA_OBLIGACIONES_AMBIENTALES]]",
+            "TABLA_MARKER_OBLIGACIONES_ANEXOS": "[[TABLA_OBLIGACIONES_ANEXOS]]",
+            "TABLA_MARKER_COMUNICADOS_EMITIDOS": "[[TABLA_COMUNICADOS_EMITIDOS]]",
+            "TABLA_MARKER_COMUNICADOS_RECIBIDOS": "[[TABLA_COMUNICADOS_RECIBIDOS]]",
         }
     
     def _cargar_glosario(self) -> List[Dict[str, str]]:
@@ -460,7 +469,8 @@ class GeneradorSeccion1(GeneradorSeccion):
                 "item": com.get("item", i+1),
                 "fecha": com.get("fecha", ""),
                 "consecutivo": com.get("numero", com.get("radicado", "")),
-                "descripcion": com.get("asunto", "")
+                "descripcion": com.get("asunto", ""),
+                "asunto": com.get("asunto", "")  # Alias para compatibilidad
             }
             for i, com in enumerate(self.comunicados_recibidos)
         ]
@@ -533,44 +543,190 @@ class GeneradorSeccion1(GeneradorSeccion):
     
     def generar(self):
         """
-        Genera la sección completa, reemplazando dinámicamente la tabla de obligaciones generales
+        Genera la sección completa usando enfoque híbrido con marcadores únicos:
+        - Jinja2 para variables simples (textos, números, etc.) - FUERA de tablas
+        - Reemplazo programático para tablas usando marcadores únicos en el template
+        
+        IMPORTANTE: En el template Word, cada tabla debe tener un marcador único
+        en la primera celda de la primera fila de datos (después del encabezado):
+        - {{ TABLA_MARKER_OBLIGACIONES_GENERALES }} para 1.5.1
+        - {{ TABLA_MARKER_OBLIGACIONES_ESPECIFICAS }} para 1.5.2
+        - {{ TABLA_MARKER_OBLIGACIONES_AMBIENTALES }} para 1.5.3
+        - {{ TABLA_MARKER_OBLIGACIONES_ANEXOS }} para 1.5.4
+        - {{ TABLA_MARKER_COMUNICADOS_EMITIDOS }} para 1.6.1
+        - {{ TABLA_MARKER_COMUNICADOS_RECIBIDOS }} para 1.6.2
+        
+        Estos marcadores son variables de Jinja2 que se renderizan con un texto único
+        que luego se busca en el documento para identificar cada tabla.
         """
-        # Primero, generar el documento base usando el método de la clase padre
+        # Generar el documento base usando el método de la clase padre (docxtpl)
         doc_template = super().generar()
         
-        # Acceder al documento interno de DocxTemplate (atributo .docx es un Document de python-docx)
-        doc = doc_template.docx
+        # Guardar el documento renderizado en memoria y reabrirlo con python-docx
+        # Esto evita corromper el XML al manipular tablas después del render
+        buffer = BytesIO()
+        doc_template.save(buffer)
+        buffer.seek(0)
+        doc = Document(buffer)
         
-        # Reemplazar la tabla de obligaciones generales dinámicamente
-        self._reemplazar_tabla_obligaciones_generales(doc)
+        # Llenar las tablas usando reemplazo programático con marcadores únicos
+        # Esto evita problemas de corrupción del XML y permite identificación precisa
         
-        # Reemplazar la tabla de obligaciones específicas dinámicamente
-        self._reemplazar_tabla_obligaciones_especificas(doc)
+        print("[INFO] Llenando tablas usando marcadores únicos...")
+        print(f"[DEBUG] obligaciones_generales_raw: {len(self.obligaciones_generales_raw)} elementos")
+        print(f"[DEBUG] obligaciones_especificas_raw: {len(self.obligaciones_especificas_raw)} elementos")
+        print(f"[DEBUG] obligaciones_ambientales_raw: {len(self.obligaciones_ambientales_raw)} elementos")
+        print(f"[DEBUG] obligaciones_anexos_raw: {len(self.obligaciones_anexos_raw)} elementos")
+        print(f"[DEBUG] comunicados_emitidos: {len(self.comunicados_emitidos)} elementos")
+        print(f"[DEBUG] comunicados_recibidos: {len(self.comunicados_recibidos)} elementos")
         
-        # Retornar el DocxTemplate modificado
-        return doc_template
+        # Procesar cada tabla usando su marcador único
+        self._reemplazar_tabla_por_marcador(doc, "TABLA_OBLIGACIONES_GENERALES", 
+                                           self._formatear_obligaciones_generales(),
+                                           self._crear_tabla_obligaciones_generales)
+        
+        self._reemplazar_tabla_por_marcador(doc, "TABLA_OBLIGACIONES_ESPECIFICAS",
+                                           self._formatear_obligaciones_especificas(),
+                                           self._crear_tabla_obligaciones_especificas)
+        
+        self._reemplazar_tabla_por_marcador(doc, "TABLA_OBLIGACIONES_AMBIENTALES",
+                                           self._formatear_obligaciones_ambientales(),
+                                           self._crear_tabla_obligaciones_ambientales)
+        
+        self._reemplazar_tabla_por_marcador(doc, "TABLA_OBLIGACIONES_ANEXOS",
+                                           self._formatear_obligaciones_anexos(),
+                                           self._crear_tabla_obligaciones_anexos)
+        
+        self._reemplazar_tabla_por_marcador(doc, "TABLA_COMUNICADOS_EMITIDOS",
+                                           self._formatear_comunicados_emitidos(),
+                                           self._crear_tabla_comunicados_emitidos)
+        
+        self._reemplazar_tabla_por_marcador(doc, "TABLA_COMUNICADOS_RECIBIDOS",
+                                           self._formatear_comunicados_recibidos(),
+                                           self._crear_tabla_comunicados_recibidos)
+        
+        return doc
+    
+    def _reemplazar_tabla_por_marcador(self, doc: Document, marcador: str, datos: list, metodo_creacion) -> None:
+        """
+        Busca una tabla en el documento usando un marcador único y la reemplaza con datos.
+        
+        Args:
+            doc: Documento de python-docx
+            marcador: Nombre del marcador (ej: "TABLA_OBLIGACIONES_GENERALES")
+            datos: Lista de datos para llenar la tabla
+            metodo_creacion: Método que crea/llena la tabla (ej: self._crear_tabla_obligaciones_generales)
+        """
+        # El marcador se renderiza como [[TABLA_XXX]] después de procesar Jinja2
+        marcador_renderizado = f"[[{marcador}]]"
+        
+        # Variaciones del marcador que pueden aparecer
+        marcador_variaciones = [
+            marcador_renderizado,  # Después de procesar Jinja2: [[TABLA_XXX]]
+            f"{{{{ TABLA_MARKER_{marcador.replace('TABLA_', '')} }}}}",  # En el template original
+            f"TABLA_MARKER_{marcador.replace('TABLA_', '')}",  # Variable de Jinja2 sin renderizar
+            marcador.upper(),  # Nombre del marcador en mayúsculas
+        ]
+        
+        # Normalizar el marcador para búsqueda
+        marcador_busqueda = marcador.upper().replace("TABLA_", "")
+        print(f"[INFO] Buscando tabla con marcador: {marcador_renderizado} (variaciones: {marcador_variaciones})")
+        
+        tabla_encontrada = None
+        tabla_idx = None
+        celda_con_marcador = None
+        
+        # Buscar el marcador en todas las tablas del documento
+        for idx, tabla in enumerate(doc.tables):
+            # Buscar en todas las celdas de la tabla
+            for fila_idx, fila in enumerate(tabla.rows):
+                for celda_idx, celda in enumerate(fila.cells):
+                    # Obtener todo el texto de la celda (incluyendo párrafos)
+                    texto_celda = ""
+                    for parrafo in celda.paragraphs:
+                        texto_celda += parrafo.text
+                    
+                    texto_celda_upper = texto_celda.upper()
+                    
+                    # Verificar si contiene el marcador renderizado [[TABLA_XXX]]
+                    encontro_marcador = marcador_renderizado.upper() in texto_celda_upper
+                    
+                    # Si no se encuentra, buscar por variaciones
+                    if not encontro_marcador:
+                        for variacion in marcador_variaciones:
+                            if variacion.upper() in texto_celda_upper:
+                                encontro_marcador = True
+                                break
+                    
+                    # También buscar por el nombre del marcador sin prefijos
+                    if not encontro_marcador and marcador_busqueda in texto_celda_upper:
+                        encontro_marcador = True
+                    
+                    if encontro_marcador:
+                        tabla_encontrada = tabla
+                        tabla_idx = idx
+                        celda_con_marcador = (fila_idx, celda_idx)
+                        print(f"[INFO] Marcador encontrado en tabla {idx}, fila {fila_idx}, celda {celda_idx}")
+                        print(f"[DEBUG] Texto de la celda: '{texto_celda[:100]}...'")
+                        break
+                
+                if tabla_encontrada:
+                    break
+            
+            if tabla_encontrada:
+                break
+        
+        if tabla_encontrada and tabla_idx is not None:
+            # No necesitamos limpiar el marcador aquí porque el método _crear_tabla_*
+            # ya limpia todas las filas excepto el encabezado antes de agregar los datos
+            # Solo limpiamos el marcador si está en el encabezado (fila 0)
+            if celda_con_marcador:
+                fila_idx, celda_idx = celda_con_marcador
+                if fila_idx == 0:
+                    # Si el marcador está en el encabezado, limpiarlo
+                    celda = tabla_encontrada.rows[0].cells[celda_idx]
+                    for parrafo in celda.paragraphs:
+                        parrafo.clear()
+            
+            # Llamar al método de creación para reemplazar la tabla
+            # Este método ya limpia todas las filas excepto el encabezado
+            print(f"[INFO] Reemplazando tabla {tabla_idx} con {len(datos)} elementos")
+            try:
+                metodo_creacion(doc, tabla_encontrada)
+                print(f"[OK] Tabla '{marcador}' procesada correctamente")
+            except Exception as e:
+                print(f"[ERROR] Error al procesar tabla '{marcador}': {str(e)}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"[WARNING] No se encontró tabla con marcador '{marcador}'")
+            print(f"[INFO] Asegúrate de agregar '{{{{ TABLA_MARKER_{marcador.replace('TABLA_', '')} }}}}' en la primera celda de datos de la tabla en el template")
+            print(f"[DEBUG] Marcador buscado: {marcador_variaciones}")
     
     def guardar(self, output_path: Path) -> None:
         """
         Genera y guarda la sección, asegurando que los cambios en las tablas se guarden correctamente
         """
-        doc_template = self.generar()
+        doc = self.generar()
         
-        # Guardar el documento modificado directamente desde el Document interno
-        # Esto asegura que los cambios en las tablas se guarden correctamente
-        doc_template.docx.save(str(output_path))
+        # Guardar usando python-docx después de reemplazar las tablas
+        doc.save(str(output_path))
         print(f"[OK] {self.nombre_seccion} guardada en: {output_path}")
     
-    def _reemplazar_tabla_obligaciones_generales(self, doc: Document) -> None:
+    def _reemplazar_tabla_obligaciones_generales(self, doc: Document, tablas_procesadas: set = None) -> None:
         """
         Busca y reemplaza la tabla de obligaciones generales con datos dinámicos
         """
+        if tablas_procesadas is None:
+            tablas_procesadas = set()
+        
         if not self.obligaciones_generales_raw:
             print("[WARNING] No hay obligaciones generales para reemplazar en la tabla")
             return
         
         # Buscar la tabla que está después del texto "1.5.1" o "OBLIGACIONES GENERALES"
         tabla_encontrada = None
+        tabla_idx = None
         
         # Estrategia 1: Buscar párrafos que mencionen "1.5.1" o "OBLIGACIONES GENERALES"
         # y luego buscar la siguiente tabla
@@ -618,6 +774,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                                         tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
                                         if tiene_item and tiene_obligacion:
                                             tabla_encontrada = tabla_candidata
+                                            tabla_idx = tabla_index
                                             print(f"[INFO] Tabla de obligaciones encontrada (índice {tabla_index})")
                                             break
                                 tabla_count_before += 1
@@ -627,7 +784,7 @@ class GeneradorSeccion1(GeneradorSeccion):
         if not tabla_encontrada:
             print("[INFO] Buscando tabla por formato de encabezados...")
             for idx, tabla in enumerate(doc.tables):
-                if len(tabla.rows) > 0:
+                if idx not in tablas_procesadas and len(tabla.rows) > 0:
                     primera_fila = tabla.rows[0]
                     encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
                     print(f"[DEBUG] Tabla {idx}: {len(tabla.columns)} columnas, encabezados: {encabezados[:3]}...")
@@ -645,6 +802,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                     if tiene_item and tiene_obligacion and tiene_periodicidad:
                         if not tabla_encontrada or (puntuacion > 3 and len(tabla.columns) >= 5):
                             tabla_encontrada = tabla
+                            tabla_idx = idx
                             print(f"[INFO] Tabla candidata encontrada (índice {idx}): {len(tabla.columns)} columnas, puntuación: {puntuacion}")
                             if puntuacion >= 4 and len(tabla.columns) >= 5:
                                 print(f"[INFO] Tabla seleccionada: {len(tabla.columns)} columnas")
@@ -658,12 +816,13 @@ class GeneradorSeccion1(GeneradorSeccion):
                 encabezados = [celda.text.strip().upper() for celda in primera_fila.cells] if primera_fila else []
                 print(f"[INFO] Tabla {idx}: {len(tabla.columns)} columnas, {len(tabla.rows)} filas, encabezados: {encabezados}")
             
-            print("[INFO] Intentando usar la primera tabla con más de 5 columnas...")
+            print("[INFO] Intentando usar la primera tabla con más de 5 columnas que no haya sido procesada...")
             # Último recurso: usar la primera tabla grande
-            for tabla in doc.tables:
-                if len(tabla.columns) >= 5:
+            for idx, tabla in enumerate(doc.tables):
+                if idx not in tablas_procesadas and len(tabla.columns) >= 5:
                     tabla_encontrada = tabla
-                    print(f"[INFO] Usando tabla con {len(tabla.columns)} columnas y {len(tabla.rows)} filas")
+                    tabla_idx = idx
+                    print(f"[INFO] Usando tabla con {len(tabla.columns)} columnas y {len(tabla.rows)} filas (índice {idx})")
                     break
         
         if tabla_encontrada:
@@ -679,22 +838,53 @@ class GeneradorSeccion1(GeneradorSeccion):
                     print(f"[WARNING] Encabezados: {encabezados}")
                     print(f"[WARNING] Buscando tabla alternativa...")
                     tabla_encontrada = None
+                    tabla_idx = None
                     # Buscar por formato específico
-                    for tabla in doc.tables:
-                        if len(tabla.rows) > 0:
+                    for k, tabla in enumerate(doc.tables):
+                        if k not in tablas_procesadas and len(tabla.rows) > 0:
                             primera_fila = tabla.rows[0]
                             encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
                             tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
                             tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
                             tiene_periodicidad = any('PERIODICIDAD' in h for h in encabezados)
-                            if tiene_item and tiene_obligacion and tiene_periodicidad:
+                            # Asegurar que NO es la tabla de anexos (que tiene menos columnas o formato diferente)
+                            tiene_anexo_solo = any('ANEXO' in h and len(tabla.columns) < 6 for h in encabezados)
+                            if tiene_item and tiene_obligacion and tiene_periodicidad and not tiene_anexo_solo:
                                 tabla_encontrada = tabla
-                                print(f"[INFO] Tabla correcta encontrada por formato")
+                                tabla_idx = k
+                                print(f"[INFO] Tabla correcta encontrada por formato (índice {k})")
                                 break
         
-        if tabla_encontrada:
-            # Reemplazar la tabla encontrada
-            self._crear_tabla_obligaciones_generales(doc, tabla_encontrada)
+        if tabla_encontrada and tabla_idx is not None:
+            # Verificar que esta tabla no haya sido procesada antes
+            if tabla_idx in tablas_procesadas:
+                print(f"[WARNING] La tabla {tabla_idx} ya fue procesada, buscando otra...")
+                # Buscar otra tabla que no haya sido procesada
+                tabla_encontrada = None
+                tabla_idx = None
+                for k, doc_table in enumerate(doc.tables):
+                    if k not in tablas_procesadas and len(doc_table.columns) == 6:
+                        primera_fila = doc_table.rows[0] if doc_table.rows else None
+                        if primera_fila:
+                            encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                            tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                            tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                            tiene_periodicidad = any('PERIODICIDAD' in h for h in encabezados)
+                            if tiene_item and tiene_obligacion and tiene_periodicidad:
+                                tabla_encontrada = doc_table
+                                tabla_idx = k
+                                print(f"[INFO] Usando tabla alternativa (índice {k}) para obligaciones generales")
+                                break
+            
+            if tabla_idx is not None and tabla_idx not in tablas_procesadas:
+                # Reemplazar la tabla encontrada
+                self._crear_tabla_obligaciones_generales(doc, tabla_encontrada)
+                tablas_procesadas.add(tabla_idx)
+                print(f"[INFO] Tabla de obligaciones generales procesada (índice {tabla_idx})")
+            elif tabla_idx is None:
+                print("[ERROR] No se pudo determinar el índice de la tabla encontrada")
+            else:
+                print("[ERROR] No se pudo encontrar una tabla disponible para obligaciones generales")
         else:
             print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar")
             print("[ERROR] Asegúrate de que el template tenga una tabla con encabezados: ÍTEM, OBLIGACIÓN, PERIODICIDAD, etc.")
@@ -803,16 +993,22 @@ class GeneradorSeccion1(GeneradorSeccion):
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_generales_raw)} datos)")
     
-    def _reemplazar_tabla_obligaciones_especificas(self, doc: Document) -> None:
+    def _reemplazar_tabla_obligaciones_especificas(self, doc: Document, tablas_procesadas: set = None) -> None:
         """
         Busca y reemplaza la tabla de obligaciones específicas con datos dinámicos
         Similar a _reemplazar_tabla_obligaciones_generales pero busca "1.5.2" o "OBLIGACIONES ESPECÍFICAS"
         """
+        if tablas_procesadas is None:
+            tablas_procesadas = set()
+        
+        print(f"[DEBUG] _reemplazar_tabla_obligaciones_especificas: {len(self.obligaciones_especificas_raw)} elementos")
         if not self.obligaciones_especificas_raw:
             print("[WARNING] No hay obligaciones específicas para reemplazar en la tabla")
+            print("[DEBUG] obligaciones_especificas_raw está vacío")
             return
         
         tabla_encontrada = None
+        tabla_idx = None
         
         # Estrategia: Buscar el párrafo "1.5.2" o "OBLIGACIONES ESPECÍFICAS" y luego la siguiente tabla con 6 columnas
         encontro_titulo = False
@@ -829,61 +1025,67 @@ class GeneradorSeccion1(GeneradorSeccion):
                     tablas_antes = sum(1 for x in elementos[:i] if hasattr(x, 'tag') and x.tag.endswith('}tbl'))
                     print(f"[INFO] Tablas antes del título: {tablas_antes}")
                     
-                    # Buscar la siguiente tabla después de este párrafo
-                    tabla_idx_en_doc_tables = -1
-                    current_table_count = 0
+                    # Tomar la primera tabla que aparece después del título y que no haya sido procesada
+                    # Como todas las tablas tienen el mismo formato, simplemente tomamos la siguiente disponible
                     for k, doc_table in enumerate(doc.tables):
-                        if current_table_count >= tablas_antes:
-                            # Esta es una tabla que aparece después del título
-                            if len(doc_table.columns) == 6:  # Buscamos una tabla con 6 columnas
-                                # Verificar que tenga encabezados de obligaciones
-                                if len(doc_table.rows) > 0:
-                                    primera_fila = doc_table.rows[0]
-                                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
-                                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
-                                    tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
-                                    if tiene_item and tiene_obligacion:
-                                        tabla_encontrada = doc_table
-                                        tabla_idx_en_doc_tables = k
-                                        print(f"[INFO] Tabla de obligaciones específicas encontrada (índice {k})")
-                                        break
-                        if hasattr(doc_table._element, 'tag') and doc_table._element.tag.endswith('}tbl'):
-                            current_table_count += 1
+                        if k not in tablas_procesadas and k >= tablas_antes:
+                            # Verificar que tenga el formato correcto (6 columnas con encabezados de obligaciones)
+                            if len(doc_table.columns) == 6 and len(doc_table.rows) > 0:
+                                primera_fila = doc_table.rows[0]
+                                encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                                tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                                tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                                if tiene_item and tiene_obligacion:
+                                    tabla_encontrada = doc_table
+                                    tabla_idx = k
+                                    print(f"[INFO] Tabla de obligaciones específicas encontrada (índice {k})")
+                                    break
                     break
         
-        # Estrategia 2: Si no encontramos por título, buscar tabla con formato correcto después de la tabla de generales
+        # Si no encontramos por título, buscar la primera tabla disponible con formato correcto
         if not tabla_encontrada:
-            print("[INFO] Intentando buscar tabla de obligaciones específicas por formato...")
+            print("[INFO] No se encontró el título, buscando primera tabla disponible con formato de obligaciones...")
             for k, doc_table in enumerate(doc.tables):
-                if len(doc_table.rows) > 0 and len(doc_table.columns) == 6:
+                if k not in tablas_procesadas and len(doc_table.columns) == 6 and len(doc_table.rows) > 0:
                     primera_fila = doc_table.rows[0]
                     encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
                     tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
                     tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
-                    tiene_periodicidad = any('PERIODICIDAD' in h for h in encabezados)
-                    tiene_observaciones = any('OBSERVACION' in h or 'OBSERVACIÓN' in h for h in encabezados)
-                    tiene_anexo = any('ANEXO' in h for h in encabezados)
-                    
-                    # Si tiene todas las columnas esperadas y no es la tabla de generales (ya procesada)
-                    if tiene_item and tiene_obligacion and tiene_periodicidad and tiene_observaciones and tiene_anexo:
-                        # Verificar que no sea la tabla de generales (comparar número de filas)
-                        # La tabla de generales ya debería tener 16 filas de datos
-                        if len(doc_table.rows) != 17:  # 1 encabezado + 16 datos de generales
-                            tabla_encontrada = doc_table
-                            print(f"[INFO] Tabla de obligaciones específicas encontrada por formato (índice {k})")
-                            break
+                    if tiene_item and tiene_obligacion:
+                        tabla_encontrada = doc_table
+                        tabla_idx = k
+                        print(f"[INFO] Tabla de obligaciones específicas encontrada por formato (índice {k})")
+                        break
         
-        if tabla_encontrada:
-            self._crear_tabla_obligaciones_especificas(doc, tabla_encontrada)
-        else:
+        if tabla_encontrada and tabla_idx is not None:
+            # Verificar que esta tabla no haya sido procesada antes
+            if tabla_idx in tablas_procesadas:
+                print(f"[WARNING] La tabla {tabla_idx} ya fue procesada, buscando otra...")
+                tabla_encontrada = None
+                tabla_idx = None
+            
+            if tabla_encontrada and tabla_idx is not None and tabla_idx not in tablas_procesadas:
+                self._crear_tabla_obligaciones_especificas(doc, tabla_encontrada)
+                tablas_procesadas.add(tabla_idx)
+                print(f"[INFO] Tabla de obligaciones específicas procesada (índice {tabla_idx})")
+        
+        if not tabla_encontrada or (tabla_encontrada and tabla_idx is not None and tabla_idx in tablas_procesadas):
             print("[WARNING] No se encontró la tabla de obligaciones específicas en el template con 6 columnas.")
-            print("[INFO] Intentando buscar la primera tabla con 6 columnas que no sea la de generales...")
+            print("[INFO] Intentando buscar la primera tabla con 6 columnas que no haya sido procesada...")
             for k, doc_table in enumerate(doc.tables):
-                if len(doc_table.columns) == 6 and len(doc_table.rows) != 17:
-                    tabla_encontrada = doc_table
-                    print(f"[INFO] Usando tabla con 6 columnas (índice {k}) para obligaciones específicas")
-                    self._crear_tabla_obligaciones_especificas(doc, tabla_encontrada)
-                    break
+                if k not in tablas_procesadas and len(doc_table.columns) == 6:
+                    primera_fila = doc_table.rows[0] if doc_table.rows else None
+                    if primera_fila:
+                        encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                        tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                        tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                        if tiene_item and tiene_obligacion:
+                            tabla_encontrada = doc_table
+                            tabla_idx = k
+                            print(f"[INFO] Usando tabla con 6 columnas (índice {k}) para obligaciones específicas")
+                            self._crear_tabla_obligaciones_especificas(doc, tabla_encontrada)
+                            tablas_procesadas.add(k)
+                            break
             
             if not tabla_encontrada:
                 print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar las obligaciones específicas.")
@@ -948,5 +1150,575 @@ class GeneradorSeccion1(GeneradorSeccion):
     def _limpiar_texto_celda(self, text: str) -> str:
         """Limpia el texto de una celda para comparación (elimina saltos de línea y espacios extra)"""
         return ' '.join(text.replace('\n', ' ').split()).upper()
+    
+    def _reemplazar_tabla_obligaciones_ambientales(self, doc: Document, tablas_procesadas: set = None) -> None:
+        """
+        Busca y reemplaza la tabla de obligaciones ambientales con datos dinámicos
+        Similar a _reemplazar_tabla_obligaciones_generales pero busca "1.5.3" o "OBLIGACIONES AMBIENTALES"
+        """
+        if tablas_procesadas is None:
+            tablas_procesadas = set()
+        
+        print(f"[DEBUG] _reemplazar_tabla_obligaciones_ambientales: {len(self.obligaciones_ambientales_raw)} elementos")
+        if not self.obligaciones_ambientales_raw:
+            print("[WARNING] No hay obligaciones ambientales para reemplazar en la tabla")
+            print("[DEBUG] obligaciones_ambientales_raw está vacío")
+            return
+        
+        tabla_encontrada = None
+        tabla_idx = None
+        
+        # Estrategia: Buscar el título "1.5.3" y encontrar la primera tabla que aparece INMEDIATAMENTE después en el XML
+        elementos = doc.element.body
+        tabla_count_before = 0
+        
+        for i, elemento in enumerate(elementos):
+            # Contar tablas antes del título
+            if hasattr(elemento, 'tag') and elemento.tag.endswith('}tbl'):
+                tabla_count_before += 1
+            
+            # Buscar el título
+            if hasattr(elemento, 'text') and elemento.text:
+                texto = elemento.text.strip().upper()
+                if ('1.5.3' in texto or '1.5.3.' in texto) and ('OBLIGACIONES' in texto and 'AMBIENTALES' in texto):
+                    print(f"[INFO] Título '1.5.3. OBLIGACIONES AMBIENTALES' encontrado en elemento {i}")
+                    print(f"[INFO] Tablas antes del título: {tabla_count_before}")
+                    
+                    # Buscar la primera tabla que aparece DESPUÉS del título en el XML
+                    for j in range(i + 1, len(elementos)):
+                        siguiente = elementos[j]
+                        if hasattr(siguiente, 'tag') and siguiente.tag.endswith('}tbl'):
+                            # Esta es la primera tabla después del título
+                            tabla_index = tabla_count_before
+                            if tabla_index < len(doc.tables):
+                                tabla_candidata = doc.tables[tabla_index]
+                                # Verificar que no haya sido procesada y que tenga el formato correcto
+                                if tabla_index not in tablas_procesadas and len(tabla_candidata.columns) == 6 and len(tabla_candidata.rows) > 0:
+                                    primera_fila = tabla_candidata.rows[0]
+                                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                                    tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                                    if tiene_item and tiene_obligacion:
+                                        tabla_encontrada = tabla_candidata
+                                        tabla_idx = tabla_index
+                                        print(f"[INFO] Tabla de obligaciones ambientales encontrada (índice {tabla_index})")
+                                        break
+                            break
+                    break
+        
+        # Si no encontramos por título, buscar la primera tabla disponible con formato correcto
+        if not tabla_encontrada:
+            print("[INFO] No se encontró el título, buscando primera tabla disponible con formato de obligaciones...")
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas and len(doc_table.columns) == 6 and len(doc_table.rows) > 0:
+                    primera_fila = doc_table.rows[0]
+                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                    tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                    if tiene_item and tiene_obligacion:
+                        tabla_encontrada = doc_table
+                        tabla_idx = k
+                        print(f"[INFO] Tabla de obligaciones ambientales encontrada por formato (índice {k})")
+                        break
+        
+        if tabla_encontrada and tabla_idx is not None:
+            # Verificar que esta tabla no haya sido procesada antes
+            if tabla_idx not in tablas_procesadas:
+                # Verificar que tenemos datos de obligaciones ambientales
+                if not self.obligaciones_ambientales_raw:
+                    print(f"[ERROR] No hay datos de obligaciones_ambientales_raw para llenar la tabla")
+                    return
+                print(f"[DEBUG] ANTES de crear tabla: obligaciones_ambientales_raw tiene {len(self.obligaciones_ambientales_raw)} elementos")
+                self._crear_tabla_obligaciones_ambientales(doc, tabla_encontrada)
+                tablas_procesadas.add(tabla_idx)
+                print(f"[INFO] Tabla de obligaciones ambientales procesada (índice {tabla_idx})")
+            else:
+                print(f"[WARNING] La tabla {tabla_idx} ya fue procesada, buscando otra...")
+                tabla_encontrada = None
+                tabla_idx = None
+        
+        if not tabla_encontrada:
+            print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar las obligaciones ambientales.")
+            print("[INFO] Intentando buscar cualquier tabla con 6 columnas que no haya sido procesada...")
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas and len(doc_table.columns) == 6:
+                    primera_fila = doc_table.rows[0] if doc_table.rows else None
+                    if primera_fila:
+                        encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                        tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                        tiene_obligacion = any('OBLIGACION' in h or 'OBLIGACIÓN' in h for h in encabezados)
+                        if tiene_item and tiene_obligacion:
+                            tabla_encontrada = doc_table
+                            self._crear_tabla_obligaciones_ambientales(doc, tabla_encontrada)
+                            tablas_procesadas.add(k)
+                            print(f"[INFO] Tabla de obligaciones ambientales procesada (índice {k})")
+                            break
+    
+    def _crear_tabla_obligaciones_ambientales(self, doc: Document, tabla_existente) -> None:
+        """
+        Reemplaza el contenido de la tabla existente con los datos dinámicos de obligaciones ambientales
+        """
+        print(f"[INFO] Reemplazando tabla de obligaciones ambientales con {len(self.obligaciones_ambientales_raw)} obligaciones")
+        print(f"[DEBUG] Datos de obligaciones_ambientales_raw: {self.obligaciones_ambientales_raw[:2] if self.obligaciones_ambientales_raw else 'VACÍO'}")
+        
+        # Limpiar todas las filas excepto el encabezado (fila 0)
+        num_filas_originales = len(tabla_existente.rows)
+        while len(tabla_existente.rows) > 1:
+            tbl = tabla_existente._tbl
+            tbl.remove(tabla_existente.rows[-1]._tr)
+        
+        print(f"[INFO] Tabla limpiada: {num_filas_originales} filas -> {len(tabla_existente.rows)} fila(s) (encabezado)")
+        
+        # Obtener número de columnas
+        num_cols = len(tabla_existente.columns)
+        print(f"[INFO] Tabla tiene {num_cols} columnas")
+        
+        # Encabezados esperados
+        encabezados_esperados = ["ÍTEM", "OBLIGACIÓN", "PERIODICIDAD", "CUMPLIÓ / NO CUMPLIÓ", "OBSERVACIONES", "ANEXO"]
+        
+        # Actualizar encabezados si no coinciden
+        if len(tabla_existente.rows) > 0:
+            header_cells = tabla_existente.rows[0].cells
+            current_headers = [self._limpiar_texto_celda(c.text) for c in header_cells]
+            print(f"[INFO] Encabezados de la tabla: {current_headers}")
+            
+            if current_headers != encabezados_esperados:
+                print("[INFO] Los encabezados de la tabla no coinciden, actualizando...")
+                for i, header_text in enumerate(encabezados_esperados):
+                    if i < num_cols:
+                        self._formatear_celda(header_cells[i], header_text, bold=True, center=True)
+                    else:
+                        print(f"[WARNING] No hay suficientes columnas para el encabezado: {header_text}")
+        
+        # Agregar datos
+        for obligacion in self.obligaciones_ambientales_raw:
+            row_cells = tabla_existente.add_row().cells
+            self._formatear_celda(row_cells[0], str(obligacion.get("item", "")))
+            self._formatear_celda(row_cells[1], obligacion.get("obligacion", ""))
+            self._formatear_celda(row_cells[2], obligacion.get("periodicidad", ""), center=True)
+            self._formatear_celda(row_cells[3], obligacion.get("cumplio", ""), center=True)
+            self._formatear_celda(row_cells[4], obligacion.get("observaciones", ""))
+            self._formatear_celda(row_cells[5], obligacion.get("anexo", ""))
+        
+        print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_ambientales_raw)} datos)")
+    
+    def _reemplazar_tabla_obligaciones_anexos(self, doc: Document, tablas_procesadas: set = None) -> None:
+        """
+        Busca y reemplaza la tabla de obligaciones anexos con datos dinámicos
+        Similar a _reemplazar_tabla_obligaciones_generales pero busca "1.5.4" o "OBLIGACIONES ANEXOS"
+        """
+        if tablas_procesadas is None:
+            tablas_procesadas = set()
+        
+        if not self.obligaciones_anexos_raw:
+            print("[WARNING] No hay obligaciones anexos para reemplazar en la tabla")
+            return
+        
+        tabla_encontrada = None
+        tabla_idx = None
+        
+        # Estrategia: Buscar el párrafo "1.5.4" o "OBLIGACIONES ANEXOS" y luego la siguiente tabla
+        elementos = doc.element.body
+        
+        for i, elemento in enumerate(elementos):
+            if hasattr(elemento, 'text') and elemento.text:
+                texto = elemento.text.strip().upper()
+                if ('1.5.4' in texto or '1.5.4.' in texto) and ('OBLIGACIONES' in texto and 'ANEXOS' in texto):
+                    print(f"[INFO] Título '1.5.4. OBLIGACIONES ANEXOS' encontrado en elemento {i}")
+                    
+                    # Contar cuántas tablas hay antes de este título
+                    tablas_antes = sum(1 for x in elementos[:i] if hasattr(x, 'tag') and x.tag.endswith('}tbl'))
+                    print(f"[INFO] Tablas antes del título: {tablas_antes}")
+                    
+                    # Tomar la primera tabla que aparece después del título y que no haya sido procesada
+                    # Para anexos, puede tener menos columnas o formato diferente
+                    for k, doc_table in enumerate(doc.tables):
+                        if k not in tablas_procesadas and k >= tablas_antes:
+                            if len(doc_table.columns) >= 3 and len(doc_table.rows) > 0:  # Mínimo 3 columnas
+                                primera_fila = doc_table.rows[0]
+                                encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                                tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                                tiene_anexo = any('ANEXO' in h for h in encabezados)
+                                if tiene_item or tiene_anexo:
+                                    tabla_encontrada = doc_table
+                                    tabla_idx = k
+                                    print(f"[INFO] Tabla de obligaciones anexos encontrada (índice {k})")
+                                    break
+                    break
+        
+        # Estrategia 2: Si no encontramos por título, buscar tabla con formato correcto
+        if not tabla_encontrada:
+            print("[INFO] Intentando buscar tabla de obligaciones anexos por formato...")
+            
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas and len(doc_table.rows) > 0:
+                    primera_fila = doc_table.rows[0]
+                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                    tiene_anexo = any('ANEXO' in h for h in encabezados)
+                    
+                    # Si tiene anexo o item y no ha sido procesada
+                    if tiene_item or tiene_anexo:
+                        tabla_encontrada = doc_table
+                        tabla_idx = k
+                        print(f"[INFO] Tabla de obligaciones anexos encontrada por formato (índice {k})")
+                        break
+        
+        if tabla_encontrada and tabla_idx is not None:
+            # Verificar que esta tabla no haya sido procesada antes
+            if tabla_idx not in tablas_procesadas:
+                self._crear_tabla_obligaciones_anexos(doc, tabla_encontrada)
+                tablas_procesadas.add(tabla_idx)
+                print(f"[INFO] Tabla de obligaciones anexos procesada (índice {tabla_idx})")
+            else:
+                print(f"[WARNING] La tabla {tabla_idx} ya fue procesada, buscando otra...")
+                tabla_encontrada = None
+                tabla_idx = None
+        
+        if not tabla_encontrada:
+            print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar las obligaciones anexos.")
+            print("[INFO] Intentando buscar cualquier tabla que no haya sido procesada...")
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas:
+                    primera_fila = doc_table.rows[0] if doc_table.rows else None
+                    if primera_fila:
+                        encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                        tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                        tiene_anexo = any('ANEXO' in h for h in encabezados)
+                        if tiene_item or tiene_anexo:
+                            tabla_encontrada = doc_table
+                            self._crear_tabla_obligaciones_anexos(doc, tabla_encontrada)
+                            tablas_procesadas.add(k)
+                            print(f"[INFO] Tabla de obligaciones anexos procesada (índice {k})")
+                            break
+    
+    def _crear_tabla_obligaciones_anexos(self, doc: Document, tabla_existente) -> None:
+        """
+        Reemplaza el contenido de la tabla existente con los datos dinámicos de obligaciones anexos
+        Nota: Para anexos, el formato puede ser diferente (solo archivo_existe y anexo)
+        """
+        print(f"[INFO] Reemplazando tabla de obligaciones anexos con {len(self.obligaciones_anexos_raw)} elementos")
+        
+        # Limpiar todas las filas excepto el encabezado (fila 0)
+        num_filas_originales = len(tabla_existente.rows)
+        while len(tabla_existente.rows) > 1:
+            tbl = tabla_existente._tbl
+            tbl.remove(tabla_existente.rows[-1]._tr)
+        
+        print(f"[INFO] Tabla limpiada: {num_filas_originales} filas -> {len(tabla_existente.rows)} fila(s) (encabezado)")
+        
+        # Obtener número de columnas
+        num_cols = len(tabla_existente.columns)
+        print(f"[INFO] Tabla tiene {num_cols} columnas")
+        
+        # Para anexos, el formato puede variar. Intentar adaptarse al formato existente
+        if len(tabla_existente.rows) > 0:
+            header_cells = tabla_existente.rows[0].cells
+            current_headers = [self._limpiar_texto_celda(c.text) for c in header_cells]
+            print(f"[INFO] Encabezados de la tabla: {current_headers}")
+        
+        # Agregar datos
+        # Si el formato es simple (archivo_existe, anexo), usar ese formato
+        # Si no, usar el formato estándar de obligaciones
+        for idx, anexo_data in enumerate(self.obligaciones_anexos_raw, start=1):
+            row_cells = tabla_existente.add_row().cells
+            
+            # Verificar si es el formato simple de anexos (archivo_existe, anexo)
+            if "archivo_existe" in anexo_data:
+                # Formato simple para anexos
+                if num_cols >= 1:
+                    self._formatear_celda(row_cells[0], str(idx))
+                if num_cols >= 2:
+                    estado = "Sí" if anexo_data.get("archivo_existe", False) else "No"
+                    self._formatear_celda(row_cells[1], estado, center=True)
+                if num_cols >= 3:
+                    self._formatear_celda(row_cells[2], anexo_data.get("anexo", ""))
+            else:
+                # Formato estándar de obligaciones
+                if num_cols >= 1:
+                    self._formatear_celda(row_cells[0], str(anexo_data.get("item", idx)))
+                if num_cols >= 2:
+                    self._formatear_celda(row_cells[1], anexo_data.get("obligacion", anexo_data.get("anexo", "")))
+                if num_cols >= 3:
+                    self._formatear_celda(row_cells[2], anexo_data.get("periodicidad", ""), center=True)
+                if num_cols >= 4:
+                    self._formatear_celda(row_cells[3], anexo_data.get("cumplio", ""), center=True)
+                if num_cols >= 5:
+                    self._formatear_celda(row_cells[4], anexo_data.get("observaciones", ""))
+                if num_cols >= 6:
+                    self._formatear_celda(row_cells[5], anexo_data.get("anexo", ""))
+        
+        print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_anexos_raw)} datos)")
+    
+    def _reemplazar_tabla_comunicados_emitidos(self, doc: Document, tablas_procesadas: set = None) -> None:
+        """
+        Busca y reemplaza la tabla de comunicados emitidos con datos dinámicos
+        Busca "1.6.1" o "EMITIDOS CONTRATO"
+        """
+        if tablas_procesadas is None:
+            tablas_procesadas = set()
+        
+        if not self.comunicados_emitidos:
+            print("[WARNING] No hay comunicados emitidos para reemplazar en la tabla")
+            return
+        
+        tabla_encontrada = None
+        tabla_idx = None
+        
+        # Estrategia: Buscar el título "1.6.1" y encontrar la primera tabla que aparece INMEDIATAMENTE después en el XML
+        elementos = doc.element.body
+        tabla_count_before = 0
+        
+        for i, elemento in enumerate(elementos):
+            # Contar tablas antes del título
+            if hasattr(elemento, 'tag') and elemento.tag.endswith('}tbl'):
+                tabla_count_before += 1
+            
+            # Buscar el título
+            if hasattr(elemento, 'text') and elemento.text:
+                texto = elemento.text.strip().upper()
+                if ('1.6.1' in texto or '1.6.1.' in texto) and ('EMITIDOS' in texto or 'COMUNICADOS' in texto):
+                    print(f"[INFO] Título '1.6.1. EMITIDOS' encontrado en elemento {i}")
+                    print(f"[INFO] Tablas antes del título: {tabla_count_before}")
+                    
+                    # Buscar la primera tabla que aparece DESPUÉS del título en el XML
+                    for j in range(i + 1, len(elementos)):
+                        siguiente = elementos[j]
+                        if hasattr(siguiente, 'tag') and siguiente.tag.endswith('}tbl'):
+                            # Esta es la primera tabla después del título
+                            tabla_index = tabla_count_before
+                            if tabla_index < len(doc.tables):
+                                tabla_candidata = doc.tables[tabla_index]
+                                # Verificar que no haya sido procesada y que tenga el formato correcto de comunicados
+                                if tabla_index not in tablas_procesadas and len(tabla_candidata.columns) >= 4 and len(tabla_candidata.rows) > 0:
+                                    primera_fila = tabla_candidata.rows[0]
+                                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                                    tiene_fecha = any('FECHA' in h for h in encabezados)
+                                    tiene_consecutivo = any('CONSECUTIVO' in h or 'RADICADO' in h for h in encabezados)
+                                    tiene_asunto = any('ASUNTO' in h or 'DESCRIPCIÓN' in h or 'DESCRIPCION' in h for h in encabezados)
+                                    # Asegurar que NO es una tabla de obligaciones (que tiene 6 columnas)
+                                    if tiene_item and tiene_fecha and tiene_consecutivo and tiene_asunto and len(tabla_candidata.columns) < 6:
+                                        tabla_encontrada = tabla_candidata
+                                        tabla_idx = tabla_index
+                                        print(f"[INFO] Tabla de comunicados emitidos encontrada (índice {tabla_index})")
+                                        break
+                            break
+                    break
+        
+        # Estrategia 2: Si no encontramos por título, buscar tabla con formato correcto
+        if not tabla_encontrada:
+            print("[INFO] Intentando buscar tabla de comunicados emitidos por formato...")
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas and len(doc_table.rows) > 0 and len(doc_table.columns) >= 4:
+                    primera_fila = doc_table.rows[0]
+                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                    tiene_fecha = any('FECHA' in h for h in encabezados)
+                    tiene_consecutivo = any('CONSECUTIVO' in h or 'RADICADO' in h for h in encabezados)
+                    tiene_descripcion = any('DESCRIPCIÓN' in h or 'ASUNTO' in h for h in encabezados)
+                    
+                    if tiene_item and tiene_fecha and tiene_consecutivo and tiene_descripcion:
+                        tabla_encontrada = doc_table
+                        tabla_idx = k
+                        print(f"[INFO] Tabla de comunicados emitidos encontrada por formato (índice {k})")
+                        break
+        
+        if tabla_encontrada and tabla_idx is not None:
+            # Verificar que esta tabla no haya sido procesada antes
+            if tabla_idx not in tablas_procesadas:
+                # Verificar que tenemos datos de comunicados emitidos
+                if not self.comunicados_emitidos:
+                    print(f"[ERROR] No hay datos de comunicados_emitidos para llenar la tabla")
+                    return
+                print(f"[DEBUG] ANTES de crear tabla: comunicados_emitidos tiene {len(self.comunicados_emitidos)} elementos")
+                print(f"[DEBUG] Verificando que NO esté usando obligaciones_anexos_raw (tiene {len(self.obligaciones_anexos_raw)} elementos)")
+                self._crear_tabla_comunicados_emitidos(doc, tabla_encontrada)
+                tablas_procesadas.add(tabla_idx)
+                print(f"[INFO] Tabla de comunicados emitidos procesada (índice {tabla_idx})")
+            else:
+                print(f"[WARNING] La tabla {tabla_idx} ya fue procesada, buscando otra...")
+                tabla_encontrada = None
+                tabla_idx = None
+        
+        if not tabla_encontrada:
+            print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar los comunicados emitidos.")
+            print("[INFO] Intentando buscar cualquier tabla con formato de comunicados que no haya sido procesada...")
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas and len(doc_table.columns) >= 4:
+                    primera_fila = doc_table.rows[0] if doc_table.rows else None
+                    if primera_fila:
+                        encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                        tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                        tiene_fecha = any('FECHA' in h for h in encabezados)
+                        tiene_consecutivo = any('CONSECUTIVO' in h or 'RADICADO' in h for h in encabezados)
+                        if tiene_item and tiene_fecha and tiene_consecutivo:
+                            tabla_encontrada = doc_table
+                            self._crear_tabla_comunicados_emitidos(doc, tabla_encontrada)
+                            tablas_procesadas.add(k)
+                            print(f"[INFO] Tabla de comunicados emitidos procesada (índice {k})")
+                            break
+    
+    def _crear_tabla_comunicados_emitidos(self, doc: Document, tabla_existente) -> None:
+        """
+        Reemplaza el contenido de la tabla existente con los datos dinámicos de comunicados emitidos
+        """
+        print(f"[INFO] Reemplazando tabla de comunicados emitidos con {len(self.comunicados_emitidos)} comunicados")
+        print(f"[DEBUG] Datos de comunicados_emitidos: {self.comunicados_emitidos[:2] if self.comunicados_emitidos else 'VACÍO'}")
+        print(f"[DEBUG] Verificando que NO esté usando obligaciones_anexos_raw: {len(self.obligaciones_anexos_raw) if hasattr(self, 'obligaciones_anexos_raw') else 'N/A'}")
+        
+        # Limpiar todas las filas excepto el encabezado (fila 0)
+        num_filas_originales = len(tabla_existente.rows)
+        while len(tabla_existente.rows) > 1:
+            tbl = tabla_existente._tbl
+            tbl.remove(tabla_existente.rows[-1]._tr)
+        
+        print(f"[INFO] Tabla limpiada: {num_filas_originales} filas -> {len(tabla_existente.rows)} fila(s) (encabezado)")
+        
+        # Obtener número de columnas
+        num_cols = len(tabla_existente.columns)
+        print(f"[INFO] Tabla tiene {num_cols} columnas")
+        
+        # Agregar datos
+        for comunicado in self.comunicados_emitidos:
+            row_cells = tabla_existente.add_row().cells
+            if num_cols >= 1:
+                self._formatear_celda(row_cells[0], str(comunicado.get("item", "")), center=True)
+            if num_cols >= 2:
+                self._formatear_celda(row_cells[1], comunicado.get("fecha", ""), center=True)
+            if num_cols >= 3:
+                self._formatear_celda(row_cells[2], comunicado.get("numero", comunicado.get("radicado", "")), center=True)
+            if num_cols >= 4:
+                self._formatear_celda(row_cells[3], comunicado.get("asunto", ""))
+        
+        print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.comunicados_emitidos)} datos)")
+    
+    def _reemplazar_tabla_comunicados_recibidos(self, doc: Document, tablas_procesadas: set = None) -> None:
+        """
+        Busca y reemplaza la tabla de comunicados recibidos con datos dinámicos
+        Busca "1.6.2" o "RECIBIDOS CONTRATO"
+        """
+        if tablas_procesadas is None:
+            tablas_procesadas = set()
+        
+        if not self.comunicados_recibidos:
+            print("[WARNING] No hay comunicados recibidos para reemplazar en la tabla")
+            return
+        
+        tabla_encontrada = None
+        tabla_idx = None
+        
+        # Estrategia: Buscar el párrafo "1.6.2" o "RECIBIDOS" y luego la siguiente tabla
+        elementos = doc.element.body
+        
+        for i, elemento in enumerate(elementos):
+            if hasattr(elemento, 'text') and elemento.text:
+                texto = elemento.text.strip().upper()
+                if ('1.6.2' in texto or '1.6.2.' in texto) and ('RECIBIDOS' in texto or 'COMUNICADOS' in texto):
+                    print(f"[INFO] Título '1.6.2. RECIBIDOS' encontrado en elemento {i}")
+                    
+                    # Contar cuántas tablas hay antes de este título
+                    tablas_antes = sum(1 for x in elementos[:i] if hasattr(x, 'tag') and x.tag.endswith('}tbl'))
+                    print(f"[INFO] Tablas antes del título: {tablas_antes}")
+                    
+                    # Buscar la siguiente tabla después de este párrafo
+                    current_table_count = 0
+                    for k, doc_table in enumerate(doc.tables):
+                        if k not in tablas_procesadas and current_table_count >= tablas_antes:
+                            # Esta es una tabla que aparece después del título
+                            if len(doc_table.columns) >= 4:  # Buscamos una tabla con al menos 4 columnas
+                                if len(doc_table.rows) > 0:
+                                    primera_fila = doc_table.rows[0]
+                                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                                    tiene_fecha = any('FECHA' in h for h in encabezados)
+                                    tiene_consecutivo = any('CONSECUTIVO' in h or 'RADICADO' in h for h in encabezados)
+                                    if tiene_item or (tiene_fecha and tiene_consecutivo):
+                                        tabla_encontrada = doc_table
+                                        tabla_idx = k
+                                        print(f"[INFO] Tabla de comunicados recibidos encontrada (índice {k})")
+                                        break
+                        if hasattr(doc_table._element, 'tag') and doc_table._element.tag.endswith('}tbl'):
+                            current_table_count += 1
+                    break
+        
+        # Estrategia 2: Si no encontramos por título, buscar tabla con formato correcto
+        if not tabla_encontrada:
+            print("[INFO] Intentando buscar tabla de comunicados recibidos por formato...")
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas and len(doc_table.rows) > 0 and len(doc_table.columns) >= 4:
+                    primera_fila = doc_table.rows[0]
+                    encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                    tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                    tiene_fecha = any('FECHA' in h for h in encabezados)
+                    tiene_consecutivo = any('CONSECUTIVO' in h or 'RADICADO' in h for h in encabezados)
+                    tiene_descripcion = any('DESCRIPCIÓN' in h or 'ASUNTO' in h for h in encabezados)
+                    
+                    if tiene_item and tiene_fecha and tiene_consecutivo and tiene_descripcion:
+                        tabla_encontrada = doc_table
+                        tabla_idx = k
+                        print(f"[INFO] Tabla de comunicados recibidos encontrada por formato (índice {k})")
+                        break
+        
+        if tabla_encontrada and tabla_idx is not None:
+            # Verificar que esta tabla no haya sido procesada antes
+            if tabla_idx not in tablas_procesadas:
+                self._crear_tabla_comunicados_recibidos(doc, tabla_encontrada)
+                tablas_procesadas.add(tabla_idx)
+                print(f"[INFO] Tabla de comunicados recibidos procesada (índice {tabla_idx})")
+            else:
+                print(f"[WARNING] La tabla {tabla_idx} ya fue procesada, buscando otra...")
+                tabla_encontrada = None
+                tabla_idx = None
+        
+        if not tabla_encontrada:
+            print("[ERROR] No se pudo encontrar ninguna tabla para reemplazar los comunicados recibidos.")
+            print("[INFO] Intentando buscar cualquier tabla con formato de comunicados que no haya sido procesada...")
+            for k, doc_table in enumerate(doc.tables):
+                if k not in tablas_procesadas and len(doc_table.columns) >= 4:
+                    primera_fila = doc_table.rows[0] if doc_table.rows else None
+                    if primera_fila:
+                        encabezados = [celda.text.strip().upper() for celda in primera_fila.cells]
+                        tiene_item = any('ITEM' in h or 'ÍTEM' in h for h in encabezados)
+                        tiene_fecha = any('FECHA' in h for h in encabezados)
+                        tiene_consecutivo = any('CONSECUTIVO' in h or 'RADICADO' in h for h in encabezados)
+                        if tiene_item and tiene_fecha and tiene_consecutivo:
+                            tabla_encontrada = doc_table
+                            self._crear_tabla_comunicados_recibidos(doc, tabla_encontrada)
+                            tablas_procesadas.add(k)
+                            print(f"[INFO] Tabla de comunicados recibidos procesada (índice {k})")
+                            break
+    
+    def _crear_tabla_comunicados_recibidos(self, doc: Document, tabla_existente) -> None:
+        """
+        Reemplaza el contenido de la tabla existente con los datos dinámicos de comunicados recibidos
+        """
+        print(f"[INFO] Reemplazando tabla de comunicados recibidos con {len(self.comunicados_recibidos)} comunicados")
+        
+        # Limpiar todas las filas excepto el encabezado (fila 0)
+        num_filas_originales = len(tabla_existente.rows)
+        while len(tabla_existente.rows) > 1:
+            tbl = tabla_existente._tbl
+            tbl.remove(tabla_existente.rows[-1]._tr)
+        
+        print(f"[INFO] Tabla limpiada: {num_filas_originales} filas -> {len(tabla_existente.rows)} fila(s) (encabezado)")
+        
+        # Obtener número de columnas
+        num_cols = len(tabla_existente.columns)
+        print(f"[INFO] Tabla tiene {num_cols} columnas")
+        
+        # Agregar datos
+        for comunicado in self.comunicados_recibidos:
+            row_cells = tabla_existente.add_row().cells
+            if num_cols >= 1:
+                self._formatear_celda(row_cells[0], str(comunicado.get("item", "")), center=True)
+            if num_cols >= 2:
+                self._formatear_celda(row_cells[1], comunicado.get("fecha", ""), center=True)
+            if num_cols >= 3:
+                self._formatear_celda(row_cells[2], comunicado.get("numero", comunicado.get("radicado", "")), center=True)
+            if num_cols >= 4:
+                self._formatear_celda(row_cells[3], comunicado.get("asunto", ""))
+        
+        print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.comunicados_recibidos)} datos)")
 
 

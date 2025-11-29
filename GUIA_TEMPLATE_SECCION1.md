@@ -72,11 +72,30 @@ Estas variables vienen del archivo `config.py` y se pueden usar directamente en 
 
 #### Tabla de Obligaciones Generales (1.5.1)
 
+**Método 1: Usar sintaxis `{% tbl %}` de docxtpl (RECOMENDADO)**
+
+En el template Word, crea una tabla con encabezados y luego usa esta sintaxis:
+
 ```jinja2
+{% tbl_obligaciones_generales %}
 {% for obligacion in tabla_obligaciones_generales %}
 {{ obligacion.item }} | {{ obligacion.obligacion }} | {{ obligacion.periodicidad }} | {{ obligacion.cumplio }} | {{ obligacion.observaciones }} | {{ obligacion.anexo }}
 {% endfor %}
+{% endtbl_obligaciones_generales %}
 ```
+
+**Método 2: Loop dentro de una fila de tabla existente**
+
+1. Crea una tabla en Word con encabezados (ÍTEM | OBLIGACIÓN | PERIODICIDAD | CUMPLIÓ | OBSERVACIONES | ANEXO)
+2. En la **primera fila de datos** (fila 2, después del encabezado), coloca:
+   - **Celda 1:** `{% for obligacion in tabla_obligaciones_generales %}`
+   - **Celda 2:** `{{ obligacion.item }}`
+   - **Celda 3:** `{{ obligacion.obligacion }}`
+   - **Celda 4:** `{{ obligacion.periodicidad }}`
+   - **Celda 5:** `{{ obligacion.cumplio }}`
+   - **Celda 6:** `{{ obligacion.observaciones }}`
+   - **Celda 7:** `{{ obligacion.anexo }}{% endfor %}`
+3. **Elimina todas las demás filas de datos** - docxtpl las generará automáticamente
 
 **Campos disponibles:**
 - `item`: Número de ítem
@@ -199,17 +218,53 @@ Estas variables vienen del archivo `config.py` y se pueden usar directamente en 
 El contrato {{ contrato_numero }} tiene vigencia desde {{ fecha_inicio }} hasta {{ fecha_terminacion }}.
 ```
 
-### Ejemplo 2: Tabla Dinámica
+### Ejemplo 2: Tabla Dinámica con docxtpl
 
-En el template Word, crea una tabla con encabezados y luego usa:
+**PASO A PASO para crear una tabla dinámica en Word:**
 
-```jinja2
-{% for obligacion in tabla_obligaciones_generales %}
-{{ obligacion.item }} | {{ obligacion.obligacion }} | {{ obligacion.periodicidad }} | {{ obligacion.cumplio }} | {{ obligacion.observaciones }} | {{ obligacion.anexo }}
-{% endfor %}
-```
+1. **Abre el template en Microsoft Word**
+2. **Crea una tabla** con los encabezados que necesites (ej: ÍTEM | OBLIGACIÓN | PERIODICIDAD | CUMPLIÓ | OBSERVACIONES | ANEXO)
+3. **En la primera fila de datos** (fila 2, después del encabezado), coloca el loop:
 
-**Nota:** En docxtpl, para tablas dinámicas, generalmente se usa el método de reemplazo programático (como se hace en `_reemplazar_tabla_obligaciones_generales`), pero también puedes usar loops de Jinja2 si el template está configurado correctamente.
+   **Celda 1 (ÍTEM):**
+   ```
+   {% for obligacion in tabla_obligaciones_generales %}
+   {{ obligacion.item }}
+   ```
+
+   **Celda 2 (OBLIGACIÓN):**
+   ```
+   {{ obligacion.obligacion }}
+   ```
+
+   **Celda 3 (PERIODICIDAD):**
+   ```
+   {{ obligacion.periodicidad }}
+   ```
+
+   **Celda 4 (CUMPLIÓ):**
+   ```
+   {{ obligacion.cumplio }}
+   ```
+
+   **Celda 5 (OBSERVACIONES):**
+   ```
+   {{ obligacion.observaciones }}
+   ```
+
+   **Celda 6 (ANEXO):**
+   ```
+   {{ obligacion.anexo }}
+   {% endfor %}
+   ```
+
+4. **Elimina todas las demás filas de datos** - docxtpl generará automáticamente una fila por cada elemento en la lista
+
+5. **Aplica el formato que desees** (fuentes, colores, bordes) a la primera fila - docxtpl lo copiará a todas las filas generadas
+
+**Resultado:** docxtpl generará automáticamente una fila por cada obligación en `tabla_obligaciones_generales`, manteniendo el formato de la fila original.
+
+**Nota:** Si prefieres usar la sintaxis `{% tbl %}` de docxtpl, puedes usar el Método 1 mencionado arriba, pero el Método 2 (loop en fila) es más compatible y funciona mejor con tablas complejas.
 
 ---
 
@@ -274,6 +329,15 @@ En el template Word, crea una tabla con encabezados y luego usa:
 - [ ] El template usa sintaxis Jinja2 correcta
 - [ ] Los nombres de variables coinciden con los del generador
 - [ ] Las tablas en el template tienen el formato correcto
+- [ ] Los loops `{% for %}` están correctamente cerrados con `{% endfor %}`
+- [ ] La primera fila de datos contiene el loop completo
+- [ ] Las demás filas de datos han sido eliminadas (docxtpl las generará)
+
+## 📖 VER EJEMPLO PRÁCTICO
+
+Para ver un ejemplo paso a paso de cómo crear una tabla dinámica, consulta:
+- **`EJEMPLO_TABLA_DOCXTPL.md`** - Guía práctica con capturas de pantalla conceptuales
+- **`COMO_FUNCIONA_DETECCION_TABLAS.md`** - Explicación técnica de cómo docxtpl detecta dónde construir las tablas
 
 ---
 
