@@ -32,6 +32,7 @@ class GeneradorSeccion5(GeneradorSeccion):
         self.cargar_desde_mongodb = cargar_desde_mongodb
         self.datos_laboratorio_raw: List[Dict] = []
         self.reporte_laboratorio: List[Dict] = []
+        self.reintegrados_inventario: List[Dict] = []
     
     def cargar_datos(self) -> None:
         """Carga datos de laboratorio desde MongoDB"""
@@ -118,15 +119,43 @@ class GeneradorSeccion5(GeneradorSeccion):
         
         return reporte
     
+    def _filtrar_reintegrados_inventario(self) -> List[Dict[str, Any]]:
+        """
+        Filtra los registros que corresponden a REINTEGRADOS AL INVENTARIO
+        
+        Returns:
+            Lista de registros con ESTADO = "OPERATIVO", "REPARADO" o "REPARADO CAMPO"
+        """
+        if not self.datos_laboratorio_raw:
+            logger.warning("No hay datos de laboratorio para filtrar")
+            return []
+        
+        # Estados para REINTEGRADOS AL INVENTARIO
+        estados_reintegrados = ["OPERATIVO", "REPARADO", "REPARADO CAMPO"]
+        
+        reintegrados = []
+        for registro in self.datos_laboratorio_raw:
+            estado = str(registro.get("estado", "")).strip().upper()
+            if estado in estados_reintegrados:
+                reintegrados.append(registro)
+        
+        logger.info(f"Registros REINTEGRADOS AL INVENTARIO encontrados: {len(reintegrados)}")
+        return reintegrados
+    
     def procesar(self) -> Dict[str, Any]:
         """Procesa los datos y retorna el contexto para el template"""
         # Calcular cantidades por estado
         self.reporte_laboratorio = self._calcular_cantidades_por_estado()
         
-        # Agregar marcador de tabla al contexto
+        # Filtrar registros REINTEGRADOS AL INVENTARIO
+        self.reintegrados_inventario = self._filtrar_reintegrados_inventario()
+        
+        # Agregar marcadores de tabla al contexto
         contexto = {
             "TABLA_MARKER_REPORTE_LABORATORIO": "[[TABLA_REPORTE_LABORATORIO]]",
-            "reporte_laboratorio": self.reporte_laboratorio
+            "TABLA_MARKER_CONCEPTO_TECNICO": "[[TABLA_CONCEPTO_TECNICO]]",
+            "reporte_laboratorio": self.reporte_laboratorio,
+            "reintegrados_inventario": self.reintegrados_inventario
         }
         
         return contexto
@@ -166,6 +195,14 @@ class GeneradorSeccion5(GeneradorSeccion):
             "TABLA_REPORTE_LABORATORIO",
             self.reporte_laboratorio,
             self._crear_tabla_reporte_laboratorio
+        )
+        
+        # Reemplazar tabla de concepto técnico (REINTEGRADOS AL INVENTARIO)
+        self._reemplazar_tabla_por_marcador(
+            doc,
+            "TABLA_CONCEPTO_TECNICO",
+            self.reintegrados_inventario,
+            self._crear_tabla_concepto_tecnico
         )
         
         return doc
@@ -336,6 +373,110 @@ class GeneradorSeccion5(GeneradorSeccion):
                             run.font.bold = True
         
         logger.info(f"Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.reporte_laboratorio)} datos)")
+    
+    def _crear_tabla_concepto_tecnico(self, doc: Document, tabla_existente) -> None:
+        """
+        Reemplaza el contenido de la tabla existente con los datos de REINTEGRADOS AL INVENTARIO
+        
+        Args:
+            doc: Documento de python-docx
+            tabla_existente: Tabla existente en el documento
+        """
+        logger.info(f"Reemplazando tabla de concepto técnico con {len(self.reintegrados_inventario)} registros")
+        
+        # Limpiar todas las filas excepto el encabezado (fila 0)
+        num_filas_originales = len(tabla_existente.rows)
+        while len(tabla_existente.rows) > 1:
+            tbl = tabla_existente._tbl
+            tbl.remove(tabla_existente.rows[-1]._tr)
+        
+        logger.info(f"Tabla limpiada: {num_filas_originales} filas -> {len(tabla_existente.rows)} fila(s) (encabezado)")
+        
+        # Obtener número de columnas
+        num_cols = len(tabla_existente.columns)
+        logger.info(f"Tabla tiene {num_cols} columnas")
+        
+        # Verificar/actualizar encabezados
+        if len(tabla_existente.rows) > 0:
+            encabezados_esperados = ["ID", "FECHA", "PUNTO", "EQUIPO", "SERIAL", "ESTADO"]
+            primera_fila = tabla_existente.rows[0]
+            
+            # Si la tabla tiene menos de 6 columnas, intentar agregar columnas faltantes
+            if num_cols < 6:
+                logger.warning(f"La tabla tiene solo {num_cols} columnas, se necesitan 6. Intentando agregar columnas...")
+                from docx.shared import Inches
+                columnas_faltantes = 6 - num_cols
+                for i in range(columnas_faltantes):
+                    tabla_existente.add_column(Inches(1.5))
+                    logger.info(f"Columna {num_cols + i + 1} agregada")
+                num_cols = len(tabla_existente.columns)
+                logger.info(f"Tabla ahora tiene {num_cols} columnas")
+            
+            # Actualizar encabezados si no coinciden
+            for i, header_text in enumerate(encabezados_esperados):
+                if i < num_cols and i < len(primera_fila.cells):
+                    celda = primera_fila.cells[i]
+                    texto_actual = celda.text.strip().upper()
+                    if texto_actual != header_text.upper():
+                        celda.text = header_text
+                        # Formatear encabezado
+                        for parrafo in celda.paragraphs:
+                            for run in parrafo.runs:
+                                run.font.bold = True
+                                run.font.size = Pt(10)
+                            parrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Mapeo de campos de los registros a las columnas
+        mapeo_columnas = {
+            0: 'id',
+            1: 'fecha',
+            2: 'punto',
+            3: 'equipo',
+            4: 'serial',
+            5: 'estado'
+        }
+        
+        # Agregar filas con los datos
+        for registro in self.reintegrados_inventario:
+            fila = tabla_existente.add_row()
+            celdas = fila.cells
+            
+            # Llenar cada celda según el mapeo
+            for i in range(min(num_cols, 6)):
+                campo = mapeo_columnas.get(i, '')
+                valor = registro.get(campo, '')
+                
+                if i < len(celdas):
+                    # Limpiar contenido existente de la celda
+                    celdas[i].text = ''
+                    # Agregar el nuevo texto
+                    parrafo = celdas[i].paragraphs[0] if celdas[i].paragraphs else celdas[i].add_paragraph()
+                    parrafo.clear()
+                    run = parrafo.add_run(str(valor) if valor else '')
+                    
+                    # Aplicar formato según la columna
+                    if i == 0:  # ID
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run.font.size = Pt(10)
+                    elif i == 1:  # FECHA
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run.font.size = Pt(10)
+                    elif i == 2:  # PUNTO
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        run.font.size = Pt(10)
+                    elif i == 3:  # EQUIPO
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        run.font.size = Pt(10)
+                    elif i == 4:  # SERIAL
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        run.font.size = Pt(10)
+                    elif i == 5:  # ESTADO
+                        parrafo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        run.font.size = Pt(10)
+                    
+                    run.font.name = 'Calibri'
+        
+        logger.info(f"Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.reintegrados_inventario)} datos)")
     
     def guardar(self, output_path: Path) -> None:
         """
