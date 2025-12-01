@@ -214,6 +214,12 @@ SHAREPOINT_CLIENT_SECRET = os.getenv("SHAREPOINT_CLIENT_SECRET", "")
 SHAREPOINT_TENANT_ID = os.getenv("SHAREPOINT_TENANT_ID", "")
 # Ruta base adicional en SharePoint (ej: "Documentos compartidos" o "Shared Documents" o carpeta base)
 SHAREPOINT_BASE_PATH = os.getenv("SHAREPOINT_BASE_PATH", "")
+# Configuración GLPI MySQL
+GLPI_MYSQL_HOST = os.getenv("GLPI_MYSQL_HOST", "")
+GLPI_MYSQL_PORT = int(os.getenv("GLPI_MYSQL_PORT", "3306"))
+GLPI_MYSQL_USER = os.getenv("GLPI_MYSQL_USER", "")
+GLPI_MYSQL_PASSWORD = os.getenv("GLPI_MYSQL_PASSWORD", "")
+GLPI_MYSQL_DATABASE = os.getenv("GLPI_MYSQL_DATABASE", "glpi")
 
 # Lista de meses en español (para compatibilidad)
 MESES_LISTA = [
