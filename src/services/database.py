@@ -1,10 +1,11 @@
 """
 Servicio de conexión a MongoDB
 """
-import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional
 import logging
+
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +21,31 @@ db = Database()
 
 
 async def connect_to_mongo():
-    """Conecta a MongoDB"""
-    mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-    db_name = os.getenv("MONGODB_DB_NAME", "mantto_informe")
+    """Conecta a MongoDB con autenticación si está configurada"""
+    mongodb_uri = config.MONGODB_URI
+    db_name = config.MONGODB_DB_NAME
     
     try:
+        # Construir URI con autenticación si hay usuario y contraseña
+        if config.MONGODB_USER and config.MONGODB_PASSWORD:
+            # Si ya viene una URI completa en MONGODB_URI, usarla
+            if not mongodb_uri.startswith("mongodb://") or "@" in mongodb_uri:
+                # Ya tiene autenticación o es una URI completa
+                pass
+            else:
+                # Construir URI con autenticación
+                mongodb_uri = f"mongodb://{config.MONGODB_USER}:{config.MONGODB_PASSWORD}@{config.MONGODB_HOST}:{config.MONGODB_PORT}/{db_name}?authSource={config.MONGODB_AUTH_SOURCE}"
+        
         db.client = AsyncIOMotorClient(mongodb_uri)
         db.database = db.client[db_name]
+        
+        # Ocultar contraseña en logs
+        uri_log = mongodb_uri
+        if config.MONGODB_PASSWORD:
+            uri_log = mongodb_uri.replace(config.MONGODB_PASSWORD, "***")
+        
         logger.info(f"Conectado a MongoDB: {db_name}")
+        logger.debug(f"MongoDB URI: {uri_log}")
         
         # Verificar conexión
         await db.client.admin.command('ping')
