@@ -142,19 +142,19 @@ class GeneradorSeccion1(GeneradorSeccion):
                         
                         # Procesar obligaciones con contexto de informes aprobados
                         self.obligaciones_generales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_generales_raw
                         ]
                         self.obligaciones_especificas_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_especificas_raw
                         ]
                         self.obligaciones_ambientales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_ambientales_raw
                         ]
                         self.obligaciones_anexos_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_anexos_raw
                         ]
             except Exception as e:

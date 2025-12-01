@@ -455,7 +455,7 @@ Retorna únicamente el JSON, sin explicaciones ni texto adicional."""
         else:
             return f"No se cumplió la obligación: {obligacion[:100]}..."
     
-    def procesar_obligacion(self, obligacion: Dict, informes_aprobados_contexto: Optional[List[str]] = None) -> Dict:
+    def procesar_obligacion(self, obligacion: Dict, informes_aprobados_contexto: Optional[List[str]] = None, anio: Optional[int] = None, mes: Optional[int] = None) -> Dict:
         """
         Procesa una obligación y genera observación dinámica desde el anexo
         
@@ -497,7 +497,7 @@ Retorna únicamente el JSON, sin explicaciones ni texto adicional."""
             # Convertir ruta relativa a Path absoluto
             # Las rutas vienen como: "01SEP - 30SEP / 01 OBLIGACIONES GENERALES/ OBLIGACIÓN 1,7,8,9,10,11,13,14 y 15/ Oficio Obli SEPTIEMBRE 2025.pdf"
             print(f"[INFO] Procesando anexo para obligación {obligacion.get('item', 'N/A')}: {ruta_anexo}")
-            ruta_completa = self._resolver_ruta_anexo(ruta_anexo)
+            ruta_completa = self._resolver_ruta_anexo(ruta_anexo, anio=anio, mes=mes)
             if ruta_completa:
                 print(f"[INFO] Ruta resuelta: {ruta_completa}")
                 
@@ -639,13 +639,15 @@ Retorna únicamente el JSON, sin explicaciones ni texto adicional."""
         
         return obligacion_actualizada
     
-    def _resolver_ruta_anexo(self, ruta_relativa: str) -> Optional[str]:
+    def _resolver_ruta_anexo(self, ruta_relativa: str, anio: Optional[int] = None, mes: Optional[int] = None) -> Optional[str]:
         """
         Resuelve una ruta relativa de anexo a Path absoluto o URL de SharePoint
         
         Args:
-            ruta_relativa: Ruta como aparece en el JSON (ej: "01SEP - 30SEP / 01 OBLIGACIONES GENERALES/ ...")
+            ruta_relativa: Ruta como aparece en el JSON (ej: "11. 01SEP - 30SEP / 01 OBLIGACIONES GENERALES/ ...")
                           o URL de SharePoint
+            anio: Año del informe (opcional, para actualizar dinámicamente la carpeta)
+            mes: Mes del informe (opcional, para actualizar dinámicamente la carpeta)
             
         Returns:
             Path absoluto al archivo, URL de SharePoint, o None si no se encuentra
@@ -656,6 +658,22 @@ Retorna únicamente el JSON, sin explicaciones ni texto adicional."""
         
         # Normalizar ruta (reemplazar espacios y caracteres especiales)
         ruta_normalizada = ruta_relativa.replace(" / ", "/").replace(" /", "/").replace("/ ", "/")
+        
+        # Si se proporcionan anio y mes, actualizar dinámicamente la carpeta del periodo
+        if anio and mes:
+            # Obtener el nombre de carpeta dinámico según el mes y año
+            nombre_carpeta_dinamico = config.get_nombre_carpeta_sharepoint(anio, mes)
+            
+            # Buscar y reemplazar cualquier patrón de carpeta antigua en la ruta
+            # Patrones posibles: "11. 01SEP - 30SEP", "01SEP - 30SEP", etc.
+            import re
+            # Patrón para detectar carpetas de periodo (ej: "11. 01SEP - 30SEP" o "01SEP - 30SEP")
+            patron_carpeta = r'\d+\.\s*\d{2}[A-Z]{3}\s*-\s*\d{2}[A-Z]{3}|\d{2}[A-Z]{3}\s*-\s*\d{2}[A-Z]{3}'
+            
+            if re.search(patron_carpeta, ruta_normalizada):
+                # Reemplazar la carpeta antigua con la nueva dinámica
+                ruta_normalizada = re.sub(patron_carpeta, nombre_carpeta_dinamico, ruta_normalizada)
+                print(f"[DEBUG] Ruta actualizada dinámicamente: {ruta_relativa} -> {ruta_normalizada}")
         
         # Buscar en diferentes ubicaciones posibles
         ubicaciones_posibles = [
@@ -678,8 +696,8 @@ Retorna únicamente el JSON, sin explicaciones ni texto adicional."""
         # Intentar buscar en SharePoint si está configurado
         if self.sharepoint_extractor.site_url:
             # Si la ruta no es una URL completa, construir ruta relativa del servidor
-            # Las rutas vienen como: "01SEP - 30SEP / 01 OBLIGACIONES GENERALES/ archivo.pdf"
-            # Necesitamos convertir a: "/sites/OPERACIONES/[base_path]/01SEP - 30SEP/01 OBLIGACIONES GENERALES/archivo.pdf"
+            # Las rutas vienen como: "13. 01NOV - 30NOV / 01 OBLIGACIONES GENERALES/ archivo.pdf"
+            # Necesitamos convertir a: "/sites/OPERACIONES/[base_path]/13. 01NOV - 30NOV/01 OBLIGACIONES GENERALES/archivo.pdf"
             
             # Extraer la ruta base del sitio (ej: /sites/OPERACIONES)
             from urllib.parse import urlparse
@@ -697,7 +715,7 @@ Retorna únicamente el JSON, sin explicaciones ni texto adicional."""
             if sitio_path_parts:
                 # Ejemplo: sitio_path_parts = ['sites', 'OPERACIONES']
                 # base_path = "Documentos/PROYECTOS/Año 2024/..."
-                # ruta_normalizada = "01SEP - 30SEP/01 OBLIGACIONES GENERALES/archivo.pdf"
+                # ruta_normalizada = "13. 01NOV - 30NOV/01 OBLIGACIONES GENERALES/archivo.pdf"
                 
                 path_parts = sitio_path_parts.copy()
                 

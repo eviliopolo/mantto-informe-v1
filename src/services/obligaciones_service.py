@@ -42,6 +42,9 @@ class ObligacionesService:
         """
         Carga obligaciones desde archivo JSON
         
+        Si el archivo no existe, intenta crearlo automáticamente basándose en un archivo base
+        y usando la configuración de config_carpetas_sharepoint.json para actualizar rutas.
+        
         Args:
             anio: Año del informe
             mes: Mes del informe (1-12)
@@ -54,14 +57,20 @@ class ObligacionesService:
         if not archivo.exists():
             archivo = config.FUENTES_DIR / f"obligaciones_{config.MESES[mes].lower()}_{anio}.json"
         
+        # Si el archivo no existe, intentar crearlo automáticamente
         if not archivo.exists():
-            logger.warning(f"Archivo de obligaciones no encontrado: {archivo}")
-            return {
-                "obligaciones_generales": [],
-                "obligaciones_especificas": [],
-                "obligaciones_ambientales": [],
-                "obligaciones_anexos": []
-            }
+            logger.info(f"Archivo de obligaciones no encontrado: {archivo}. Intentando crear desde archivo base...")
+            archivo_creado = self._crear_archivo_obligaciones_desde_base(anio, mes)
+            if archivo_creado:
+                archivo = archivo_creado
+            else:
+                logger.warning(f"No se pudo crear el archivo de obligaciones para {mes}/{anio}")
+                return {
+                    "obligaciones_generales": [],
+                    "obligaciones_especificas": [],
+                    "obligaciones_ambientales": [],
+                    "obligaciones_anexos": []
+                }
         
         try:
             with open(archivo, 'r', encoding='utf-8') as f:
@@ -77,11 +86,144 @@ class ObligacionesService:
                 "obligaciones_anexos": []
             }
     
+    def _crear_archivo_obligaciones_desde_base(self, anio: int, mes: int) -> Optional[Path]:
+        """
+        Crea un archivo de obligaciones para un mes/año específico basándose en un archivo base
+        y actualizando las rutas usando config_carpetas_sharepoint.json
+        
+        Args:
+            anio: Año del informe
+            mes: Mes del informe (1-12)
+            
+        Returns:
+            Path del archivo creado o None si no se pudo crear
+        """
+        # Buscar un archivo base (preferir septiembre 2025, luego cualquier archivo disponible)
+        archivos_base = [
+            config.FUENTES_DIR / "obligaciones_9_2025.json",
+            config.FUENTES_DIR / "obligaciones_septiembre_2025.json",
+        ]
+        
+        # Buscar cualquier archivo de obligaciones como base
+        for archivo_base_candidato in config.FUENTES_DIR.glob("obligaciones_*.json"):
+            if archivo_base_candidato.name != f"obligaciones_{mes}_{anio}.json":
+                archivos_base.append(archivo_base_candidato)
+                break
+        
+        archivo_base = None
+        for candidato in archivos_base:
+            if candidato.exists():
+                archivo_base = candidato
+                break
+        
+        if not archivo_base:
+            logger.warning("No se encontró archivo base de obligaciones para crear el nuevo archivo")
+            return None
+        
+        try:
+            # Cargar archivo base
+            with open(archivo_base, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Obtener configuración de carpetas desde config_carpetas_sharepoint.json
+            # Usar get_nombre_carpeta_sharepoint que internamente carga la configuración
+            import json as json_module
+            config_path = config.DATA_DIR / "config_carpetas_sharepoint.json"
+            config_carpetas = {}
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_carpetas = json_module.load(f)
+            
+            # Buscar la carpeta del periodo en la configuración
+            nombre_carpeta_nueva = None
+            nombre_mes_nuevo = None
+            for carpeta in config_carpetas.get("carpetas_periodo", []):
+                if carpeta.get("anio") == anio and carpeta.get("mes") == mes:
+                    nombre_carpeta_nueva = carpeta.get("nombre_carpeta")
+                    nombre_mes_nuevo = config.MESES[mes].upper()
+                    break
+            
+            if not nombre_carpeta_nueva:
+                # Si no está en la configuración, usar la función de fallback
+                nombre_carpeta_nueva = config.get_nombre_carpeta_sharepoint(anio, mes)
+                nombre_mes_nuevo = config.MESES[mes].upper()
+            
+            # Buscar la carpeta del archivo base para reemplazarla
+            # Intentar detectar la carpeta del archivo base
+            nombre_carpeta_base = None
+            nombre_mes_base = None
+            
+            # Buscar en el primer anexo para detectar el patrón
+            for tipo_obligacion in ["obligaciones_generales", "obligaciones_especificas", 
+                                   "obligaciones_ambientales", "obligaciones_anexos"]:
+                obligaciones = data.get(tipo_obligacion, [])
+                if obligaciones:
+                    primer_anexo = obligaciones[0].get("anexo", "")
+                    if primer_anexo:
+                        # Buscar patrón de carpeta (ej: "11. 01SEP - 30SEP")
+                        import re
+                        patron = r'(\d+\.\s*\d{2}[A-Z]{3}\s*-\s*\d{2}[A-Z]{3})'
+                        match = re.search(patron, primer_anexo)
+                        if match:
+                            nombre_carpeta_base = match.group(1)
+                            # Extraer mes del nombre de carpeta
+                            mes_match = re.search(r'(\d{2})([A-Z]{3})', nombre_carpeta_base)
+                            if mes_match:
+                                nombre_mes_base = mes_match.group(2)
+                            break
+            
+            # Si no se encontró, usar valores por defecto
+            if not nombre_carpeta_base:
+                nombre_carpeta_base = "11. 01SEP - 30SEP"
+                nombre_mes_base = "SEP"
+            
+            # Convertir datos a string para hacer reemplazos
+            data_str = json.dumps(data, ensure_ascii=False, indent=2)
+            
+            # Reemplazar carpetas y meses
+            data_str = data_str.replace(nombre_carpeta_base, nombre_carpeta_nueva)
+            if nombre_mes_base:
+                # Reemplazar variaciones del mes
+                data_str = data_str.replace(nombre_mes_base, nombre_mes_nuevo[:3])
+                data_str = data_str.replace(nombre_mes_base.lower(), nombre_mes_nuevo.lower()[:3])
+            
+            # Reemplazar nombres completos de mes
+            meses_espanol = {
+                "SEPTIEMBRE": "SEPTIEMBRE", "OCTUBRE": "OCTUBRE", "NOVIEMBRE": "NOVIEMBRE", 
+                "DICIEMBRE": "DICIEMBRE", "ENERO": "ENERO", "FEBRERO": "FEBRERO",
+                "MARZO": "MARZO", "ABRIL": "ABRIL", "MAYO": "MAYO", "JUNIO": "JUNIO",
+                "JULIO": "JULIO", "AGOSTO": "AGOSTO"
+            }
+            for mes_esp, mes_esp_nuevo in meses_espanol.items():
+                if mes_esp_nuevo == nombre_mes_nuevo:
+                    data_str = data_str.replace(mes_esp, nombre_mes_nuevo)
+                    data_str = data_str.replace(mes_esp.lower(), nombre_mes_nuevo.lower())
+                    data_str = data_str.replace(mes_esp.capitalize(), nombre_mes_nuevo.capitalize())
+            
+            # Convertir de vuelta a JSON
+            data_actualizado = json.loads(data_str)
+            
+            # Guardar archivo nuevo
+            archivo_nuevo = config.FUENTES_DIR / f"obligaciones_{mes}_{anio}.json"
+            with open(archivo_nuevo, 'w', encoding='utf-8') as f:
+                json.dump(data_actualizado, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"Archivo de obligaciones creado automáticamente: {archivo_nuevo}")
+            logger.info(f"Carpeta actualizada: {nombre_carpeta_base} -> {nombre_carpeta_nueva}")
+            
+            return archivo_nuevo
+            
+        except Exception as e:
+            logger.error(f"Error al crear archivo de obligaciones desde base: {e}")
+            return None
+    
     def procesar_obligaciones(
         self,
         obligaciones: List[Dict],
         tipo: str = "generales",
-        regenerar_todas: bool = False
+        regenerar_todas: bool = False,
+        anio: Optional[int] = None,
+        mes: Optional[int] = None
     ) -> List[Dict]:
         """
         Procesa una lista de obligaciones y genera observaciones dinámicamente
@@ -110,7 +252,7 @@ class ObligacionesService:
                 obligacion["regenerar_observacion"] = True
             
             try:
-                obligacion_procesada = self.extractor_observaciones.procesar_obligacion(obligacion)
+                obligacion_procesada = self.extractor_observaciones.procesar_obligacion(obligacion, anio=anio, mes=mes)
                 obligaciones_procesadas.append(obligacion_procesada)
                 
                 # Log del resultado
@@ -156,7 +298,9 @@ class ObligacionesService:
             resultado["obligaciones_generales"] = self.procesar_obligaciones(
                 obligaciones["obligaciones_generales"],
                 tipo="generales",
-                regenerar_todas=regenerar_todas
+                regenerar_todas=regenerar_todas,
+                anio=anio,
+                mes=mes
             )
         
         # Procesar obligaciones específicas
@@ -167,7 +311,9 @@ class ObligacionesService:
             resultado["obligaciones_especificas"] = self.procesar_obligaciones(
                 obligaciones["obligaciones_especificas"],
                 tipo="especificas",
-                regenerar_todas=regenerar_todas
+                regenerar_todas=regenerar_todas,
+                anio=anio,
+                mes=mes
             )
         
         # Procesar obligaciones ambientales
@@ -178,7 +324,9 @@ class ObligacionesService:
             resultado["obligaciones_ambientales"] = self.procesar_obligaciones(
                 obligaciones["obligaciones_ambientales"],
                 tipo="ambientales",
-                regenerar_todas=regenerar_todas
+                regenerar_todas=regenerar_todas,
+                anio=anio,
+                mes=mes
             )
         
         # Procesar obligaciones de anexos
@@ -189,7 +337,9 @@ class ObligacionesService:
             resultado["obligaciones_anexos"] = self.procesar_obligaciones(
                 obligaciones["obligaciones_anexos"],
                 tipo="anexos",
-                regenerar_todas=regenerar_todas
+                regenerar_todas=regenerar_todas,
+                anio=anio,
+                mes=mes
             )
         
         return resultado
@@ -251,7 +401,9 @@ class ObligacionesService:
         obligaciones_procesadas = self.procesar_obligaciones(
             obligaciones_subseccion,
             tipo=tipo_corto,
-            regenerar_todas=regenerar_todas
+            regenerar_todas=regenerar_todas,
+            anio=anio,
+            mes=mes
         )
         
         return {

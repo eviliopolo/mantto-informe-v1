@@ -1,0 +1,107 @@
+{
+  "carpetas_periodo": [
+    {
+      "anio": 2025,
+      "mes": 9,
+      "nombre_carpeta": "11. 01SEP - 30SEP",
+      "descripcion": "Septiembre 2025"
+    },
+    {
+      "anio": 2025,
+      "mes": 10,
+      "nombre_carpeta": "12. 01OCT - 31OCT",
+      "descripcion": "Octubre 2025"
+    },
+    {
+      "anio": 2025,
+      "mes": 11,
+      "nombre_carpeta": "13. 01NOV - 30NOV",
+      "descripcion": "Noviembre 2025"
+    },
+    {
+      "anio": 2025,
+      "mes": 12,
+      "nombre_carpeta": "14. 01DIC - 31DIC",
+      "descripcion": "Diciembre 2025"
+    },
+    {
+      "anio": 2026,
+      "mes": 1,
+      "nombre_carpeta": "15. 01ENE - 31ENE",
+      "descripcion": "Enero 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 2,
+      "nombre_carpeta": "16. 01FEB - 28FEB",
+      "descripcion": "Febrero 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 3,
+      "nombre_carpeta": "17. 01MAR - 31MAR",
+      "descripcion": "Marzo 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 4,
+      "nombre_carpeta": "18. 01ABR - 30ABR",
+      "descripcion": "Abril 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 5,
+      "nombre_carpeta": "19. 01MAY - 31MAY",
+      "descripcion": "Mayo 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 6,
+      "nombre_carpeta": "20. 01JUN - 30JUN",
+      "descripcion": "Junio 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 7,
+      "nombre_carpeta": "21. 01JUL - 31JUL",
+      "descripcion": "Julio 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 8,
+      "nombre_carpeta": "22. 01AGO - 31AGO",
+      "descripcion": "Agosto 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 9,
+      "nombre_carpeta": "23. 01SEP - 30SEP",
+      "descripcion": "Septiembre 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 10,
+      "nombre_carpeta": "24. 01OCT - 31OCT",
+      "descripcion": "Octubre 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 11,
+      "nombre_carpeta": "25. 01NOV - 30NOV",
+      "descripcion": "Noviembre 2026"
+    },
+    {
+      "anio": 2026,
+      "mes": 12,
+      "nombre_carpeta": "26. 01DIC - 31DIC",
+      "descripcion": "Diciembre 2026"
+    }
+  ],
+  "ruta_base": "01 OBLIGACIONES GENERALES",
+  "subcarpetas": {
+    "laboratorio": "OBLIGACIÓN 2,5,6,9,13/ANEXO LABORATORIO",
+    "comunicados_emitidos": "OBLIGACIÓN 7 y 10 / COMUNICADOS EMITIDOS",
+    "comunicados_recibidos": "OBLIGACIÓN 7 y 10 / COMUNICADOS RECIBIDOS"
+  }
+}
+
