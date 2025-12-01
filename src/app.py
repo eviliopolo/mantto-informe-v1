@@ -2,6 +2,9 @@
 Aplicación principal FastAPI para el sistema de generación de informes
 """
 import os
+# """
+# Aplicación principal FastAPI para el sistema de autenticación y roles
+# """
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -13,8 +16,15 @@ import uvicorn
 load_dotenv()
 
 # Configurar logging
+
+
+import config
+from src.routes import auth_routes
+from src.services.database import connect_to_mongo, close_mongo_connection
+
+# # Configurar logging
 logging.basicConfig(
-    level=logging.INFO if os.getenv("DEBUG", "False").lower() == "true" else logging.WARNING,
+    level=logging.INFO if config.DEBUG else logging.WARNING,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
@@ -48,12 +58,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configurar CORS
-cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5001,http://localhost:3000,http://localhost:5173").split(",")
-
+# # Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",  # Permitir todos los orígenes (ajustar en producción)
+    allow_origins=config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -132,29 +140,4 @@ async def root():
         }
     }
 
-
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """Endpoint de health check"""
-    return {
-        "status": "healthy",
-        "service": "informes-api"
-    }
-
-
-if __name__ == "__main__":
-    host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", "8000"))
-    debug = os.getenv("DEBUG", "False").lower() == "true"
-    
-    logger.info(f"Iniciando servidor en http://{host}:{port}")
-    logger.info(f"Documentación disponible en http://{host}:{port}/docs")
-    
-    uvicorn.run(
-        "app:app",
-        host=host,
-        port=port,
-        reload=debug,
-        log_level="info" if debug else "warning"
-    )
 
