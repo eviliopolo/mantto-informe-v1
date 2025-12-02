@@ -121,8 +121,12 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "title": "ESCALAMIENTOS",
                 "content": {
                     "table_1": [
-                        {"escalamiento": "" , "cantidad": ""}
-                    ]
+                        {"escalamiento": "ENEL", "cantidad": ""},
+                        {"escalamiento": "CAÍDA MASIVA", "cantidad": ""},
+                        {"escalamiento": "CONECTIVIDAD", "cantidad": ""},
+                        {"escalamiento": "TOTAL", "cantidad": ""}
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -136,7 +140,8 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "content": {
                     "table_1": [
                         {"item": "" , "codigo_punto": "" , "ticket_enel": "" , "fecha_escalamiento": "" , "ticket_glpi": ""}
-                    ]                    
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -150,7 +155,8 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "content": {
                     "table_1": [                        
                         {"item": "" , "punto": "" , "localidad": "" , "cav": "" , "fecha": "" , "consecutivo_caida": ""}
-                    ]                    
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -164,7 +170,8 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "content": {
                     "table_1": [                        
                         {"item": "" , "codigo_punto": "" , "ticket_etb": "" , "fecha_escalamiento": "" , "ticket_glpi": ""}
-                    ]                    
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -189,19 +196,46 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "title": "INFORME EJECUTIVO DEL ESTADO DEL SISTEMA",
                 "content": {
                     "table_1": [
-                        {"estado": "" , "cantidad": ""}
+                        {"estado": "CAÍDA MASIVA", "cantidad": ""},
+                        {"estado": "FUERA DE SERVICIO", "cantidad": ""},
+                        {"estado": "OPERATIVA", "cantidad": ""},
+                        {"estado": "OPERATIVA CON NOVEDAD", "cantidad": ""},
+                        {"estado": "TOTAL", "cantidad": ""}
                     ],
+                    "cantidades_estado": {},
                     "image": "",
                     "section_1": "",
                     "section_2": "",
                     "table_2": [
-                        {"responsable": "" , "cantidad": ""}
+                        {"responsable": "PTE APROBACIÓN USO DE BOLSA", "cantidad": ""},
+                        {"responsable": "CONECTIVIDAD", "cantidad": ""},
+                        {"responsable": "MANTENIMIENTO", "cantidad": ""},
+                        {"responsable": "SINIESTRO", "cantidad": ""},
+                        {"responsable": "ENERGIZACIÓN", "cantidad": ""},
+                        {"responsable": "OBRAS", "cantidad": ""},
+                        {"responsable": "PUNTO DESMONTADO", "cantidad": ""},
+                        {"responsable": "ENEL", "cantidad": ""},
+                        {"responsable": "TOTAL", "cantidad": ""}
                     ],
+                    "cantidades_responsable": {},
                     "section_3": "",
                     "table_3": [
-                        {"subsistema": "" , "caida_masiva": "" , "fuera_de_servicio": "" , "operativa": "" , "operativa_con_novedad": "" , "total": ""}                        
+                        {"subsistema": "ESTACIONES DE POLICÍA", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO 350", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO 732", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO ALCALDÍA", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO CAI", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO COLEGIOS", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO CTP", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO ESU-C4", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO ESU-ESTADIO", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO FVS", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO TRANSMILENIO", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "TOTAL", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""}
                     ],
+                    "datos_subsistemas": {},
                     "name_document": "",
+                    "observaciones": "",
                 },
                 "user_created": 1,
                 "user_updated": 1,

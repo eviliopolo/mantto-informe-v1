@@ -51,4 +51,10 @@ Thumbs.db
 .env
 config_local.py
 
+# salida de documentos generados
+output/
+
+# Archivos temporales de Word
+~$*.docx
+~$*.doc
 

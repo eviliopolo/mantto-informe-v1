@@ -59,15 +59,15 @@ class Section2Controller:
             elif id_section == "2.4":
                 data_section = await self.generador._seccion_2_4_tickets(data)
             elif id_section == "2.5":
-                data_section = self.generador._seccion_2_5_escalamientos(data)
+                data_section = await self.generador._seccion_2_5_escalamientos(data)
             elif id_section == "2.5.1":
-                data_section = self.generador._seccion_2_5_1_enel(data)
+                data_section = await self.generador._seccion_2_5_1_enel(data)
             elif id_section == "2.5.2":
-                data_section = self.generador._seccion_2_5_2_caida_masiva(data)
+                data_section = await self.generador._seccion_2_5_2_caida_masiva(data)
             elif id_section == "2.5.3":
-                data_section = self.generador._seccion_2_5_3_conectividad(data)
+                data_section = await self.generador._seccion_2_5_3_conectividad(data)
             elif id_section == "2.6":
-                data_section = self.generador._seccion_2_6_hojas_vida(data)
+                data_section = await self.generador._seccion_2_6_hojas_vida(data)
             elif id_section == "2.7":
                 data_section = self.generador._seccion_2_7_estado_sistema(data)
             else:

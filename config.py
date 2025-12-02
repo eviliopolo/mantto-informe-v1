@@ -231,3 +231,15 @@ MESES_LISTA = [
 MONGODB_URI = os.getenv("MONGODB_URI", "")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "")
 
+# ============================================================================
+# CONFIGURACIÓN DE RUTAS
+# ============================================================================
+# Directorio base del proyecto
+BASE_DIR = Path(__file__).parent
+
+# Directorio de templates
+TEMPLATES_DIR = BASE_DIR / "src" / "resources" / "templates"
+
+# Directorio de salida para documentos generados
+OUTPUT_DIR = BASE_DIR / "output"
+
