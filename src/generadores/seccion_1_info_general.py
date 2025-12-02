@@ -972,7 +972,19 @@ class GeneradorSeccion1(GeneradorSeccion):
             # Llenar cada celda según el mapeo
             for i in range(min(num_cols, 6)):
                 campo = mapeo_columnas.get(i, '')
-                valor = obligacion.get(campo, '')
+                
+                # Manejar anexos de forma especial (es una lista, no un string)
+                if i == 5:  # ANEXO - columna 5
+                    # Mostrar anexos (concatenar rutas de todos los anexos)
+                    anexos = obligacion.get("anexos", [])
+                    if anexos:
+                        rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                        valor = "; ".join(rutas_anexos) if rutas_anexos else ""
+                    else:
+                        # Fallback: intentar obtener el campo 'anexo' antiguo si existe
+                        valor = obligacion.get("anexo", "")
+                else:
+                    valor = obligacion.get(campo, '')
                 
                 if i < len(celdas):
                     # Limpiar contenido existente de la celda
@@ -1465,7 +1477,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 if num_cols >= 1:
                     self._formatear_celda(row_cells[0], str(anexo_data.get("item", idx)))
                 if num_cols >= 2:
-                    self._formatear_celda(row_cells[1], anexo_data.get("obligacion", anexo_data.get("anexo", "")))
+                    self._formatear_celda(row_cells[1], anexo_data.get("obligacion", ""))
                 if num_cols >= 3:
                     self._formatear_celda(row_cells[2], anexo_data.get("periodicidad", ""), center=True)
                 if num_cols >= 4:
@@ -1473,7 +1485,15 @@ class GeneradorSeccion1(GeneradorSeccion):
                 if num_cols >= 5:
                     self._formatear_celda(row_cells[4], anexo_data.get("observaciones", ""))
                 if num_cols >= 6:
-                    self._formatear_celda(row_cells[5], anexo_data.get("anexo", ""))
+                    # Mostrar anexos (concatenar rutas de todos los anexos)
+                    anexos = anexo_data.get("anexos", [])
+                    if anexos:
+                        rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                        texto_anexos = "; ".join(rutas_anexos) if rutas_anexos else ""
+                    else:
+                        # Fallback: intentar obtener el campo 'anexo' antiguo si existe
+                        texto_anexos = anexo_data.get("anexo", "")
+                    self._formatear_celda(row_cells[5], texto_anexos)
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_anexos_raw)} datos)")
     
