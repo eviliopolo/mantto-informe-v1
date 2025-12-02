@@ -39,8 +39,12 @@ async def lifespan(app: FastAPI):
     logger.info("Iniciando aplicación FastAPI...")
     logger.info("=" * 80)
     
-    # Aquí puedes agregar inicializaciones si es necesario
-    # Por ejemplo, conexión a MongoDB si la necesitas
+    # Conectar a MongoDB
+    try:
+        await connect_to_mongo()
+        logger.info("✓ MongoDB conectado")
+    except Exception as e:
+        logger.warning(f"No se pudo conectar a MongoDB: {e}")
     
     yield
     
@@ -48,6 +52,13 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 80)
     logger.info("Cerrando aplicación...")
     logger.info("=" * 80)
+    
+    # Cerrar conexión a MongoDB
+    try:
+        await close_mongo_connection()
+        logger.info("✓ Conexión a MongoDB cerrada")
+    except Exception as e:
+        logger.warning(f"Error al cerrar conexión a MongoDB: {e}")
 
 
 # Crear aplicación FastAPI

@@ -8,8 +8,6 @@ from pymongo import MongoClient
 import logging
 import config
 
-import config
-
 logger = logging.getLogger(__name__)
 
 # Cliente global
@@ -50,6 +48,8 @@ def get_database():
 
 async def connect_to_mongo():
     """Conecta a MongoDB con autenticación si está configurada"""
+    global _client, _database
+    
     mongodb_uri = config.MONGODB_URI
     db_name = config.MONGODB_DB_NAME
     
@@ -64,8 +64,8 @@ async def connect_to_mongo():
                 # Construir URI con autenticación
                 mongodb_uri = f"mongodb://{config.MONGODB_USER}:{config.MONGODB_PASSWORD}@{config.MONGODB_HOST}:{config.MONGODB_PORT}/{db_name}?authSource={config.MONGODB_AUTH_SOURCE}"
         
-        db.client = AsyncIOMotorClient(mongodb_uri)
-        db.database = db.client[db_name]
+        _client = AsyncIOMotorClient(mongodb_uri)
+        _database = _client[db_name]
         
         # Ocultar contraseña en logs
         uri_log = mongodb_uri
@@ -76,7 +76,7 @@ async def connect_to_mongo():
         logger.debug(f"MongoDB URI: {uri_log}")
         
         # Verificar conexión
-        await db.client.admin.command('ping')
+        await _client.admin.command('ping')
         logger.info("Conexión a MongoDB verificada exitosamente")
         
     except Exception as e:

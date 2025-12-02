@@ -1,6 +1,14 @@
 import os
-import aiomysql
-from typing import Optional, List, Dict, Any
+try:
+    import aiomysql
+    AIOMYSQL_AVAILABLE = True
+except ImportError:
+    AIOMYSQL_AVAILABLE = False
+    aiomysql = None
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import aiomysql
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,14 +17,18 @@ logger = logging.getLogger(__name__)
 class GLPIService:
     
     def __init__(self):
+        if not AIOMYSQL_AVAILABLE:
+            logger.warning("aiomysql no está instalado. Las funciones de MySQL GLPI no estarán disponibles.")
         self.host = os.getenv("GLPI_MYSQL_HOST", "")
         self.port = int(os.getenv("GLPI_MYSQL_PORT", "3306"))
         self.user = os.getenv("GLPI_MYSQL_USER", "")
         self.password = os.getenv("GLPI_MYSQL_PASSWORD", "")
         self.database = os.getenv("GLPI_MYSQL_DATABASE", "glpi")
-        self.pool: Optional[aiomysql.Pool] = None
+        self.pool: Optional[Any] = None
         
     async def connect(self) -> bool:
+        if not AIOMYSQL_AVAILABLE:
+            raise ImportError("aiomysql no está instalado. Instala con: pip install aiomysql")
         try:
             self.pool = await aiomysql.create_pool(
                 host=self.host,
@@ -42,6 +54,8 @@ class GLPIService:
             self.pool = None
     
     async def get_actividades_por_subsistema(self, anio: int, mes: int) -> List[Dict[str, Any]]:
+        if not AIOMYSQL_AVAILABLE:
+            raise ImportError("aiomysql no está instalado. Instala con: pip install aiomysql")
         if not self.pool:
             await self.connect()
         
@@ -108,6 +122,8 @@ class GLPIService:
         Returns:
             Lista de visitas de diagnóstico por subsistema
         """
+        if not AIOMYSQL_AVAILABLE:
+            raise ImportError("aiomysql no está instalado. Instala con: pip install aiomysql")
         if not self.pool:
             await self.connect()
         

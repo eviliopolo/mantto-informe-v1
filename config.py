@@ -20,6 +20,9 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "src" / "resources" / "data"
 OUTPUT_DIR = BASE_DIR / "output"
 TEMPLATES_DIR = BASE_DIR / "src" / "resources" / "templates"
+FUENTES_DIR = BASE_DIR / "data" / "fuentes"
+FIJOS_DIR = BASE_DIR / "src" / "resources" / "data" / "fijos"
+INFORMES_APROBADOS_DIR = BASE_DIR / "docs" / "informesAprobados"
 
 
 # ============================================================================
