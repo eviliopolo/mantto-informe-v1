@@ -264,19 +264,22 @@ class ExtractorObservaciones:
                 contexto_informes = "\n\n═══════════════════════════════════════════════════════════\n"
                 contexto_informes += "OBSERVACIONES DE INFORMES APROBADOS ANTERIORES (REFERENCIA PRINCIPAL):\n"
                 contexto_informes += "═══════════════════════════════════════════════════════════\n"
-                contexto_informes += "IMPORTANTE: Estas son las observaciones REALES y APROBADAS de meses anteriores.\n"
-                contexto_informes += "DEBES generar una observación CASI IDÉNTICA en tono, estilo y estructura.\n"
-                contexto_informes += "Usa estas observaciones como PLANTILLA y solo adapta detalles del anexo actual.\n\n"
+                contexto_informes += "IMPORTANTE: Estas son las observaciones REALES y APROBADAS de la MISMA SECCIÓN de meses anteriores.\n"
+                contexto_informes += "Estas observaciones provienen de la misma sección del informe (1.5.1, 1.5.2 o 1.5.3 según corresponda).\n"
+                contexto_informes += "DEBES generar una observación CASI IDÉNTICA en tono, estilo, estructura y terminología.\n"
+                contexto_informes += "MANTÉN el mismo tono de redacción, las mismas expresiones técnicas y el mismo estilo de escritura.\n"
+                contexto_informes += "Usa estas observaciones como PLANTILLA EXACTA y solo adapta detalles específicos del anexo actual.\n"
+                contexto_informes += "NO cambies el tono, las frases clave ni la estructura general.\n\n"
                 
                 for i, texto_informe in enumerate(informes_aprobados_contexto[:3], 1):
-                    # Extraer solo la sección relevante de cada informe (sección 1.5.1)
+                    # Extraer la sección relevante de cada informe (puede ser 1.5.1, 1.5.2 o 1.5.3)
                     # Aumentar límite para capturar más contexto de observaciones
-                    texto_limite = texto_informe[:3000] if len(texto_informe) > 3000 else texto_informe
-                    contexto_informes += f"--- OBSERVACIONES DEL INFORME APROBADO {i} (MES ANTERIOR) ---\n"
+                    texto_limite = texto_informe[:4000] if len(texto_informe) > 4000 else texto_informe
+                    contexto_informes += f"--- OBSERVACIONES DEL INFORME APROBADO {i} (MES ANTERIOR - MISMA SECCIÓN) ---\n"
                     contexto_informes += f"{texto_limite}\n"
                     contexto_informes += f"--- FIN OBSERVACIONES INFORME {i} ---\n\n"
             
-            prompt = f"""Eres un asistente experto en generar observaciones de cumplimiento contractual para informes técnicos. Tu objetivo principal es mantener la CONSISTENCIA y SIMILITUD con las observaciones de informes aprobados anteriores.
+            prompt = f"""Eres un asistente experto en generar observaciones de cumplimiento contractual para informes técnicos. Tu objetivo principal es mantener la CONSISTENCIA y SIMILITUD EXACTA con las observaciones de informes aprobados anteriores de la MISMA SECCIÓN.
 
 CONTEXTO DE LA OBLIGACIÓN:
 - Obligación: {obligacion}
@@ -289,31 +292,39 @@ CONTENIDO DEL ANEXO ACTUAL:
 
 INSTRUCCIONES CRÍTICAS (ORDEN DE PRIORIDAD):
 
-1. **PRIORIDAD MÁXIMA - SIMILITUD CON OBSERVACIONES ANTERIORES:**
-   - Si hay observaciones de informes aprobados anteriores para esta misma obligación, DEBES generar una observación CASI IDÉNTICA
-   - Mantén el MISMO TONO, ESTILO y ESTRUCTURA de las observaciones anteriores
-   - Usa las mismas frases, expresiones y terminología que aparecen en los informes anteriores
+1. **PRIORIDAD MÁXIMA - SIMILITUD EXACTA CON OBSERVACIONES DE LA MISMA SECCIÓN:**
+   - Las observaciones anteriores provienen de la MISMA SECCIÓN del informe (1.5.1, 1.5.2 o 1.5.3)
+   - DEBES generar una observación CASI IDÉNTICA en tono, estilo, estructura y terminología
+   - MANTÉN el MISMO TONO de redacción que caracteriza a esta sección específica
+   - Usa las MISMAS frases, expresiones técnicas y palabras clave que aparecen en los informes anteriores
+   - Conserva el MISMO ESTILO de escritura (oraciones largas/cortas, uso de comas, estructura de párrafos)
    - Solo adapta detalles específicos del anexo actual si son relevantes y no cambian el sentido general
-   - La observación debe ser RECONOCIBLE como parte de la misma serie de informes
+   - La observación debe ser RECONOCIBLE como parte de la misma serie de informes y de la misma sección
 
-2. **CONSISTENCIA DE ESTILO:**
+2. **CONSISTENCIA DE TONO POR SECCIÓN:**
+   - Cada sección (1.5.1, 1.5.2, 1.5.3) tiene su propio tono y estilo característico
+   - MANTÉN el tono específico de la sección a la que pertenece esta obligación
+   - No mezcles estilos de diferentes secciones
+   - Respeta las convenciones de redacción propias de esta sección
+
+3. **CONSISTENCIA DE ESTILO:**
    - Mantén el mismo nivel de formalidad y profesionalismo
    - Usa la misma estructura de párrafos y longitud aproximada
    - Conserva las mismas palabras clave y expresiones técnicas
    - Respeta el mismo formato de redacción (oraciones largas/cortas, uso de comas, etc.)
 
-3. **REFERENCIA AL ANEXO ACTUAL:**
+4. **REFERENCIA AL ANEXO ACTUAL:**
    - Si las observaciones anteriores mencionan detalles específicos del anexo, adapta esos detalles al anexo actual
    - Mantén la misma forma de referenciar el anexo (ej: "según se detalla en el anexo actual", "conforme se evidencia en el anexo", etc.)
    - No cambies la estructura solo porque el anexo actual tenga información diferente
 
-4. **REQUISITOS TÉCNICOS:**
+5. **REQUISITOS TÉCNICOS:**
    - Máximo 200 palabras
    - Texto corrido, sin viñetas ni listas
    - Lenguaje profesional y técnico apropiado para informes contractuales
    - Confirmar el cumplimiento de la obligación
 
-IMPORTANTE: Si hay observaciones anteriores disponibles, tu objetivo es generar una observación que sea CASI IDÉNTICA en tono, estilo y estructura. La similitud es más importante que la creatividad. Solo adapta los detalles específicos del anexo actual cuando sea absolutamente necesario.
+IMPORTANTE: Si hay observaciones anteriores disponibles de la misma sección, tu objetivo es generar una observación que sea CASI IDÉNTICA en tono, estilo, estructura y terminología. La similitud con el tono de la sección es más importante que la creatividad. Solo adapta los detalles específicos del anexo actual cuando sea absolutamente necesario.
 
 OBSERVACIÓN:"""
 

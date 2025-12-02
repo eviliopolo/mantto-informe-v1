@@ -136,25 +136,38 @@ class GeneradorSeccion1(GeneradorSeccion):
                     if self.usar_llm_observaciones and self.extractor_observaciones:
                         print("[INFO] Generando observaciones dinámicas desde anexos usando LLM...")
                         
-                        # Obtener contexto de los últimos 3 informes aprobados
-                        print("[INFO] Obteniendo contexto de informes aprobados anteriores...")
-                        contexto_informes = obtener_contexto_informes_aprobados(cantidad=3)
+                        # Obtener contexto de los últimos 3 informes aprobados POR SECCIÓN
+                        # Cada tipo de obligación debe usar su sección correspondiente para mantener el tono
+                        print("[INFO] Obteniendo contexto de informes aprobados anteriores por sección...")
                         
-                        # Procesar obligaciones con contexto de informes aprobados
+                        contexto_generales = obtener_contexto_informes_aprobados(cantidad=3, tipo_seccion="generales")
+                        contexto_especificas = obtener_contexto_informes_aprobados(cantidad=3, tipo_seccion="especificas")
+                        contexto_ambientales = obtener_contexto_informes_aprobados(cantidad=3, tipo_seccion="ambientales")
+                        # Para anexos, usar el contexto de generales (no hay sección específica)
+                        contexto_anexos = contexto_generales
+                        
+                        # Procesar obligaciones con contexto de informes aprobados de su sección correspondiente
+                        print("[INFO] Procesando obligaciones generales con contexto de sección 1.5.1...")
                         self.obligaciones_generales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_generales, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_generales_raw
                         ]
+                        
+                        print("[INFO] Procesando obligaciones específicas con contexto de sección 1.5.2...")
                         self.obligaciones_especificas_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_especificas, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_especificas_raw
                         ]
+                        
+                        print("[INFO] Procesando obligaciones ambientales con contexto de sección 1.5.3...")
                         self.obligaciones_ambientales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_ambientales, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_ambientales_raw
                         ]
+                        
+                        print("[INFO] Procesando obligaciones de anexos...")
                         self.obligaciones_anexos_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes, anio=self.anio, mes=self.mes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_anexos, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_anexos_raw
                         ]
             except Exception as e:
