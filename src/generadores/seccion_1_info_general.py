@@ -1133,7 +1133,14 @@ class GeneradorSeccion1(GeneradorSeccion):
             self._formatear_celda(row_cells[2], obligacion.get("periodicidad", ""), center=True)
             self._formatear_celda(row_cells[3], obligacion.get("cumplio", ""), center=True)
             self._formatear_celda(row_cells[4], obligacion.get("observaciones", ""))
-            self._formatear_celda(row_cells[5], obligacion.get("anexo", ""))
+            # Mostrar anexos (concatenar rutas de todos los anexos)
+            anexos = obligacion.get("anexos", [])
+            if anexos:
+                rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                texto_anexos = "; ".join(rutas_anexos) if rutas_anexos else ""
+            else:
+                texto_anexos = ""
+            self._formatear_celda(row_cells[5], texto_anexos)
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_especificas_raw)} datos)")
     
@@ -1298,7 +1305,14 @@ class GeneradorSeccion1(GeneradorSeccion):
             self._formatear_celda(row_cells[2], obligacion.get("periodicidad", ""), center=True)
             self._formatear_celda(row_cells[3], obligacion.get("cumplio", ""), center=True)
             self._formatear_celda(row_cells[4], obligacion.get("observaciones", ""))
-            self._formatear_celda(row_cells[5], obligacion.get("anexo", ""))
+            # Mostrar anexos (concatenar rutas de todos los anexos)
+            anexos = obligacion.get("anexos", [])
+            if anexos:
+                rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                texto_anexos = "; ".join(rutas_anexos) if rutas_anexos else ""
+            else:
+                texto_anexos = ""
+            self._formatear_celda(row_cells[5], texto_anexos)
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_ambientales_raw)} datos)")
     

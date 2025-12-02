@@ -158,19 +158,22 @@ class ObligacionesService:
                                    "obligaciones_ambientales", "obligaciones_anexos"]:
                 obligaciones = data.get(tipo_obligacion, [])
                 if obligaciones:
-                    primer_anexo = obligaciones[0].get("anexo", "")
-                    if primer_anexo:
-                        # Buscar patrón de carpeta (ej: "11. 01SEP - 30SEP")
-                        import re
-                        patron = r'(\d+\.\s*\d{2}[A-Z]{3}\s*-\s*\d{2}[A-Z]{3})'
-                        match = re.search(patron, primer_anexo)
-                        if match:
-                            nombre_carpeta_base = match.group(1)
-                            # Extraer mes del nombre de carpeta
-                            mes_match = re.search(r'(\d{2})([A-Z]{3})', nombre_carpeta_base)
-                            if mes_match:
-                                nombre_mes_base = mes_match.group(2)
-                            break
+                    # Obtener anexos del primer item
+                    anexos = obligaciones[0].get("anexos", [])
+                    if anexos and len(anexos) > 0:
+                        primer_anexo = anexos[0].get("ruta", "")
+                        if primer_anexo:
+                            # Buscar patrón de carpeta (ej: "11. 01SEP - 30SEP")
+                            import re
+                            patron = r'(\d+\.\s*\d{2}[A-Z]{3}\s*-\s*\d{2}[A-Z]{3})'
+                            match = re.search(patron, primer_anexo)
+                            if match:
+                                nombre_carpeta_base = match.group(1)
+                                # Extraer mes del nombre de carpeta
+                                mes_match = re.search(r'(\d{2})([A-Z]{3})', nombre_carpeta_base)
+                                if mes_match:
+                                    nombre_mes_base = mes_match.group(2)
+                                break
             
             # Si no se encontró, usar valores por defecto
             if not nombre_carpeta_base:
@@ -431,32 +434,49 @@ class ObligacionesService:
         resultado = []
         
         for obligacion in obligaciones:
-            ruta_anexo = obligacion.get("anexo", "")
+            # Obtener anexos (formato requerido)
+            anexos = obligacion.get("anexos", [])
             
-            # Verificar existencia del archivo
-            archivo_existe = False
-            mensaje_anexo = ""
+            # Verificar existencia de todos los anexos
+            archivos_encontrados = []
+            archivos_no_encontrados = []
             
-            if ruta_anexo and ruta_anexo != "-" and ruta_anexo.lower() != "no aplica":
-                try:
-                    logger.info(f"Verificando existencia del archivo: {ruta_anexo}")
-                    # Intentar verificar existencia en SharePoint
-                    archivo_existe = sharepoint_extractor.verificar_archivo_existe(ruta_anexo)
-                    
-                    if archivo_existe:
-                        mensaje_anexo = ruta_anexo  # Si existe, poner la ruta completa
-                        logger.info(f"✓ Archivo encontrado: {ruta_anexo}")
-                    else:
-                        mensaje_anexo = "Archivo no existe"  # Si no existe, mensaje fijo
-                        logger.warning(f"✗ Archivo no encontrado: {ruta_anexo}")
+            for anexo in anexos:
+                ruta_anexo = anexo.get("ruta", "")
+                revisar = anexo.get("revisar", True)
+                
+                # Solo verificar anexos que se deben revisar
+                if not revisar:
+                    continue
+                
+                if ruta_anexo and ruta_anexo != "-" and ruta_anexo.lower() != "no aplica":
+                    try:
+                        logger.info(f"Verificando existencia del archivo: {ruta_anexo}")
+                        # Intentar verificar existencia en SharePoint
+                        archivo_existe = sharepoint_extractor.verificar_archivo_existe(ruta_anexo)
                         
-                except Exception as e:
-                    logger.error(f"Error al verificar archivo {ruta_anexo}: {e}")
-                    archivo_existe = False
-                    mensaje_anexo = "Archivo no existe"  # En caso de error, considerar como no existe
+                        if archivo_existe:
+                            archivos_encontrados.append(ruta_anexo)
+                            logger.info(f"✓ Archivo encontrado: {ruta_anexo}")
+                        else:
+                            archivos_no_encontrados.append(ruta_anexo)
+                            logger.warning(f"✗ Archivo no encontrado: {ruta_anexo}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error al verificar archivo {ruta_anexo}: {e}")
+                        archivos_no_encontrados.append(ruta_anexo)
+            
+            # Determinar si todos los archivos existen
+            archivo_existe = len(archivos_encontrados) > 0 and len(archivos_no_encontrados) == 0
+            
+            # Construir mensaje
+            if archivo_existe:
+                mensaje_anexo = ", ".join(archivos_encontrados) if archivos_encontrados else "Archivo encontrado"
+            elif archivos_no_encontrados:
+                mensaje_anexo = f"Archivos no encontrados: {', '.join(archivos_no_encontrados)}"
             else:
-                mensaje_anexo = "Archivo no existe"
-                logger.info(f"⚠ No se especificó ruta de anexo")
+                mensaje_anexo = "No se especificaron anexos"
+                logger.info(f"⚠ No se especificaron anexos para la obligación")
             
             # Formato simplificado: solo archivo_existe y anexo
             resultado.append({
