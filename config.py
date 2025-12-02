@@ -4,12 +4,22 @@ Centraliza todas las configuraciones del sistema, incluyendo variables de entorn
 """
 
 import os
+import logging
 from pathlib import Path
 from datetime import datetime
+from typing import Dict
 from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env
 load_dotenv()
+
+# ============================================================================
+# DIRECTORIOS
+# ============================================================================
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "src" / "resources" / "data"
+OUTPUT_DIR = BASE_DIR / "output"
+TEMPLATES_DIR = BASE_DIR / "src" / "resources" / "templates"
 
 
 # ============================================================================
@@ -198,9 +208,124 @@ def get_periodo_texto(anio: int, mes: int) -> str:
     """Retorna el periodo en formato texto: 'Septiembre de 2025'"""
     return f"{MESES[mes]} de {anio}"
 
-# Configuración GLPI
-GLPI_API_URL = "https://glpi.etb.com.co/apirest.php"
-GLPI_API_TOKEN = os.getenv("GLPI_API_TOKEN", "TU_TOKEN_AQUI")
+# ============================================================================
+# LOGGER
+# ============================================================================
+logger = logging.getLogger(__name__)
+
+def _cargar_config_carpetas_sharepoint() -> Dict:
+    """
+    Carga la configuración de carpetas de SharePoint desde el archivo JSON
+    
+    Returns:
+        Diccionario con la configuración de carpetas
+    """
+    import json
+    
+    config_path = DATA_DIR / "config_carpetas_sharepoint.json"
+    
+    if not config_path.exists():
+        logger.warning(f"Archivo de configuración no encontrado: {config_path}")
+        # Retornar configuración por defecto (fallback)
+        return {
+            "carpetas_periodo": [],
+            "ruta_base": "01 OBLIGACIONES GENERALES",
+            "subcarpetas": {
+                "laboratorio": "OBLIGACIÓN 2,5,6,9,13/ANEXO LABORATORIO",
+                "comunicados_emitidos": "OBLIGACIÓN 7 y 10 / COMUNICADOS EMITIDOS",
+                "comunicados_recibidos": "OBLIGACIÓN 7 y 10 / COMUNICADOS RECIBIDOS"
+            }
+        }
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error al cargar configuración de carpetas SharePoint: {e}")
+        # Retornar configuración por defecto
+        return {
+            "carpetas_periodo": [],
+            "ruta_base": "01 OBLIGACIONES GENERALES",
+            "subcarpetas": {
+                "laboratorio": "OBLIGACIÓN 2,5,6,9,13/ANEXO LABORATORIO",
+                "comunicados_emitidos": "OBLIGACIÓN 7 y 10 / COMUNICADOS EMITIDOS",
+                "comunicados_recibidos": "OBLIGACIÓN 7 y 10 / COMUNICADOS RECIBIDOS"
+            }
+        }
+
+def get_nombre_carpeta_sharepoint(anio: int, mes: int) -> str:
+    """
+    Obtiene el nombre de carpeta de SharePoint desde el archivo de configuración JSON
+    
+    Primero busca en el archivo JSON. Si no encuentra, calcula dinámicamente como fallback.
+    
+    Args:
+        anio: Año del informe
+        mes: Mes del informe (1-12)
+        
+    Returns:
+        Nombre de carpeta en formato SharePoint (ej: "11. 01SEP - 30SEP")
+    """
+    # Cargar configuración
+    config_carpetas = _cargar_config_carpetas_sharepoint()
+    
+    # Buscar en la configuración
+    for carpeta in config_carpetas.get("carpetas_periodo", []):
+        if carpeta.get("anio") == anio and carpeta.get("mes") == mes:
+            nombre_carpeta = carpeta.get("nombre_carpeta")
+            if nombre_carpeta:
+                logger.info(f"Carpeta encontrada en configuración: {nombre_carpeta} para {anio}-{mes}")
+                return nombre_carpeta
+    
+    # Fallback: calcular dinámicamente si no está en la configuración
+    logger.warning(f"No se encontró carpeta en configuración para {anio}-{mes}, calculando dinámicamente...")
+    from calendar import monthrange
+    
+    # Calcular el número de carpeta (mes + 2)
+    numero_carpeta = mes + 2
+    
+    # Obtener mes abreviado (primeras 3 letras en mayúsculas)
+    mes_abrev = MESES[mes].upper()[:3]
+    
+    # Calcular el último día del mes
+    ultimo_dia = monthrange(anio, mes)[1]
+    
+    # Formatear: "{numero}. 01{MES} - {ultimo_dia}{MES}"
+    return f"{numero_carpeta}. 01{mes_abrev} - {ultimo_dia}{mes_abrev}"
+
+def get_ruta_completa_sharepoint(anio: int, mes: int, tipo: str = "laboratorio") -> str:
+    """
+    Obtiene la ruta completa de SharePoint según el tipo de carpeta
+    
+    Args:
+        anio: Año del informe
+        mes: Mes del informe (1-12)
+        tipo: Tipo de carpeta ("laboratorio", "comunicados_emitidos", "comunicados_recibidos")
+        
+    Returns:
+        Ruta completa en formato SharePoint
+    """
+    # Obtener nombre de carpeta del periodo
+    nombre_carpeta = get_nombre_carpeta_sharepoint(anio, mes)
+    
+    # Cargar configuración
+    config_carpetas = _cargar_config_carpetas_sharepoint()
+    
+    # Obtener ruta base
+    ruta_base = config_carpetas.get("ruta_base", "01 OBLIGACIONES GENERALES")
+    
+    # Obtener subcarpeta según el tipo
+    subcarpetas = config_carpetas.get("subcarpetas", {})
+    subcarpeta = subcarpetas.get(tipo, "")
+    
+    if subcarpeta:
+        return f"{nombre_carpeta}/{ruta_base}/{subcarpeta}"
+    else:
+        return f"{nombre_carpeta}/{ruta_base}"
+
+# ============================================================================
+# CONFIGURACIÓN ADICIONAL
+# ============================================================================
 
 # Configuración OpenAI (LLM)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -214,20 +339,11 @@ SHAREPOINT_CLIENT_SECRET = os.getenv("SHAREPOINT_CLIENT_SECRET", "")
 SHAREPOINT_TENANT_ID = os.getenv("SHAREPOINT_TENANT_ID", "")
 # Ruta base adicional en SharePoint (ej: "Documentos compartidos" o "Shared Documents" o carpeta base)
 SHAREPOINT_BASE_PATH = os.getenv("SHAREPOINT_BASE_PATH", "")
+
 # Configuración GLPI MySQL
 GLPI_MYSQL_HOST = os.getenv("GLPI_MYSQL_HOST", "")
 GLPI_MYSQL_PORT = int(os.getenv("GLPI_MYSQL_PORT", "3306"))
 GLPI_MYSQL_USER = os.getenv("GLPI_MYSQL_USER", "")
 GLPI_MYSQL_PASSWORD = os.getenv("GLPI_MYSQL_PASSWORD", "")
 GLPI_MYSQL_DATABASE = os.getenv("GLPI_MYSQL_DATABASE", "glpi")
-
-# Lista de meses en español (para compatibilidad)
-MESES_LISTA = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-]
-
-# Configuración MongoDB
-MONGODB_URI = os.getenv("MONGODB_URI", "")
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "")
 

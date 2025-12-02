@@ -33,11 +33,13 @@ class Seccion5Service:
         nombre_mes = config.MESES[mes].upper()
         return f"ANEXO_{nombre_mes}.xlsx"
     
-    def _construir_ruta_sharepoint(self, ruta_personalizada: Optional[str] = None) -> str:
+    def _construir_ruta_sharepoint(self, anio: int, mes: int, ruta_personalizada: Optional[str] = None) -> str:
         """
         Construye la ruta en SharePoint donde se encuentra el archivo Excel
         
         Args:
+            anio: Año del informe
+            mes: Mes del informe (1-12)
             ruta_personalizada: Ruta personalizada (opcional). Si no se proporciona, usa la ruta por defecto
             
         Returns:
@@ -46,9 +48,8 @@ class Seccion5Service:
         if ruta_personalizada:
             return ruta_personalizada
         
-        # Ruta por defecto según el usuario
-        # /11.%2001SEP%20-%2030SEP/01%20OBLIGACIONES%20GENERALES/OBLIGACI%C3%93N%202,5,6,9,13/ANEXO%20LABORATORIO/
-        return "11. 01SEP - 30SEP/01 OBLIGACIONES GENERALES/OBLIGACIÓN 2,5,6,9,13/ANEXO LABORATORIO"
+        # Obtener ruta completa desde configuración JSON
+        return config.get_ruta_completa_sharepoint(anio, mes, tipo="laboratorio")
     
     async def procesar_excel_desde_sharepoint(
         self,
@@ -82,7 +83,7 @@ class Seccion5Service:
             logger.info(f"[DEBUG] Procesando archivo de laboratorio: {nombre_archivo}")
             
             # Construir ruta completa en SharePoint
-            ruta_carpeta = self._construir_ruta_sharepoint(ruta_sharepoint)
+            ruta_carpeta = self._construir_ruta_sharepoint(anio, mes, ruta_sharepoint)
             
             # Mostrar información de configuración de SharePoint
             logger.info("=" * 80)
@@ -207,7 +208,7 @@ class Seccion5Service:
                         "nombre_archivo": nombre_archivo,
                         "ruta_completa_intentada": ruta_completa,
                         "ruta_sharepoint_parametro": ruta_sharepoint,
-                        "ruta_por_defecto": "11. 01SEP - 30SEP/01 OBLIGACIONES GENERALES/OBLIGACIÓN 2,5,6,9,13/ANEXO LABORATORIO"
+                        "ruta_por_defecto": config.get_nombre_carpeta_sharepoint(anio, mes) + "/01 OBLIGACIONES GENERALES/OBLIGACIÓN 2,5,6,9,13/ANEXO LABORATORIO"
                     },
                     "total_registros": 0,
                     "datos": []

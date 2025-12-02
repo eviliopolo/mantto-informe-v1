@@ -59,15 +59,12 @@ class ComunicadosEmitidosService:
         Returns:
             Ruta de la carpeta en formato SharePoint
         """
-        mes_abrev = config.MESES[mes].upper()[:3]
-        
-        if tipo == "recibidos":
-            ruta = f"11. 01{mes_abrev} - 30{mes_abrev} / 01 OBLIGACIONES GENERALES / OBLIGACIÓN 7 y 10 / COMUNICADOS RECIBIDOS"
-        else:  # emitidos por defecto
-            ruta = f"11. 01{mes_abrev} - 30{mes_abrev} / 01 OBLIGACIONES GENERALES / OBLIGACIÓN 7 y 10 / COMUNICADOS EMITIDOS"
+        # Obtener ruta completa desde configuración JSON
+        tipo_carpeta = "comunicados_emitidos" if tipo == "emitidos" else "comunicados_recibidos"
+        ruta = config.get_ruta_completa_sharepoint(anio, mes, tipo=tipo_carpeta)
         
         logger.info(f"[DEBUG] Ruta construida para comunicados {tipo}: '{ruta}'")
-        logger.info(f"[DEBUG] Mes: {mes}, Mes abreviado: {mes_abrev}, Año: {anio}")
+        logger.info(f"[DEBUG] Mes: {mes}, Año: {anio}")
         print(f"[DEBUG] Ruta construida para comunicados {tipo}: '{ruta}'")
         return ruta
     

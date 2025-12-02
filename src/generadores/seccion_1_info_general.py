@@ -136,25 +136,38 @@ class GeneradorSeccion1(GeneradorSeccion):
                     if self.usar_llm_observaciones and self.extractor_observaciones:
                         print("[INFO] Generando observaciones dinámicas desde anexos usando LLM...")
                         
-                        # Obtener contexto de los últimos 3 informes aprobados
-                        print("[INFO] Obteniendo contexto de informes aprobados anteriores...")
-                        contexto_informes = obtener_contexto_informes_aprobados(cantidad=3)
+                        # Obtener contexto de los últimos 3 informes aprobados POR SECCIÓN
+                        # Cada tipo de obligación debe usar su sección correspondiente para mantener el tono
+                        print("[INFO] Obteniendo contexto de informes aprobados anteriores por sección...")
                         
-                        # Procesar obligaciones con contexto de informes aprobados
+                        contexto_generales = obtener_contexto_informes_aprobados(cantidad=3, tipo_seccion="generales")
+                        contexto_especificas = obtener_contexto_informes_aprobados(cantidad=3, tipo_seccion="especificas")
+                        contexto_ambientales = obtener_contexto_informes_aprobados(cantidad=3, tipo_seccion="ambientales")
+                        # Para anexos, usar el contexto de generales (no hay sección específica)
+                        contexto_anexos = contexto_generales
+                        
+                        # Procesar obligaciones con contexto de informes aprobados de su sección correspondiente
+                        print("[INFO] Procesando obligaciones generales con contexto de sección 1.5.1...")
                         self.obligaciones_generales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_generales, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_generales_raw
                         ]
+                        
+                        print("[INFO] Procesando obligaciones específicas con contexto de sección 1.5.2...")
                         self.obligaciones_especificas_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_especificas, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_especificas_raw
                         ]
+                        
+                        print("[INFO] Procesando obligaciones ambientales con contexto de sección 1.5.3...")
                         self.obligaciones_ambientales_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_ambientales, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_ambientales_raw
                         ]
+                        
+                        print("[INFO] Procesando obligaciones de anexos...")
                         self.obligaciones_anexos_raw = [
-                            self.extractor_observaciones.procesar_obligacion(obl, contexto_informes)
+                            self.extractor_observaciones.procesar_obligacion(obl, contexto_anexos, anio=self.anio, mes=self.mes)
                             for obl in self.obligaciones_anexos_raw
                         ]
             except Exception as e:
@@ -959,7 +972,19 @@ class GeneradorSeccion1(GeneradorSeccion):
             # Llenar cada celda según el mapeo
             for i in range(min(num_cols, 6)):
                 campo = mapeo_columnas.get(i, '')
-                valor = obligacion.get(campo, '')
+                
+                # Manejar anexos de forma especial (es una lista, no un string)
+                if i == 5:  # ANEXO - columna 5
+                    # Mostrar anexos (concatenar rutas de todos los anexos)
+                    anexos = obligacion.get("anexos", [])
+                    if anexos:
+                        rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                        valor = "; ".join(rutas_anexos) if rutas_anexos else ""
+                    else:
+                        # Fallback: intentar obtener el campo 'anexo' antiguo si existe
+                        valor = obligacion.get("anexo", "")
+                else:
+                    valor = obligacion.get(campo, '')
                 
                 if i < len(celdas):
                     # Limpiar contenido existente de la celda
@@ -1133,7 +1158,14 @@ class GeneradorSeccion1(GeneradorSeccion):
             self._formatear_celda(row_cells[2], obligacion.get("periodicidad", ""), center=True)
             self._formatear_celda(row_cells[3], obligacion.get("cumplio", ""), center=True)
             self._formatear_celda(row_cells[4], obligacion.get("observaciones", ""))
-            self._formatear_celda(row_cells[5], obligacion.get("anexo", ""))
+            # Mostrar anexos (concatenar rutas de todos los anexos)
+            anexos = obligacion.get("anexos", [])
+            if anexos:
+                rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                texto_anexos = "; ".join(rutas_anexos) if rutas_anexos else ""
+            else:
+                texto_anexos = ""
+            self._formatear_celda(row_cells[5], texto_anexos)
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_especificas_raw)} datos)")
     
@@ -1298,7 +1330,14 @@ class GeneradorSeccion1(GeneradorSeccion):
             self._formatear_celda(row_cells[2], obligacion.get("periodicidad", ""), center=True)
             self._formatear_celda(row_cells[3], obligacion.get("cumplio", ""), center=True)
             self._formatear_celda(row_cells[4], obligacion.get("observaciones", ""))
-            self._formatear_celda(row_cells[5], obligacion.get("anexo", ""))
+            # Mostrar anexos (concatenar rutas de todos los anexos)
+            anexos = obligacion.get("anexos", [])
+            if anexos:
+                rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                texto_anexos = "; ".join(rutas_anexos) if rutas_anexos else ""
+            else:
+                texto_anexos = ""
+            self._formatear_celda(row_cells[5], texto_anexos)
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_ambientales_raw)} datos)")
     
@@ -1438,7 +1477,7 @@ class GeneradorSeccion1(GeneradorSeccion):
                 if num_cols >= 1:
                     self._formatear_celda(row_cells[0], str(anexo_data.get("item", idx)))
                 if num_cols >= 2:
-                    self._formatear_celda(row_cells[1], anexo_data.get("obligacion", anexo_data.get("anexo", "")))
+                    self._formatear_celda(row_cells[1], anexo_data.get("obligacion", ""))
                 if num_cols >= 3:
                     self._formatear_celda(row_cells[2], anexo_data.get("periodicidad", ""), center=True)
                 if num_cols >= 4:
@@ -1446,7 +1485,15 @@ class GeneradorSeccion1(GeneradorSeccion):
                 if num_cols >= 5:
                     self._formatear_celda(row_cells[4], anexo_data.get("observaciones", ""))
                 if num_cols >= 6:
-                    self._formatear_celda(row_cells[5], anexo_data.get("anexo", ""))
+                    # Mostrar anexos (concatenar rutas de todos los anexos)
+                    anexos = anexo_data.get("anexos", [])
+                    if anexos:
+                        rutas_anexos = [anexo.get("ruta", "") for anexo in anexos if anexo.get("ruta")]
+                        texto_anexos = "; ".join(rutas_anexos) if rutas_anexos else ""
+                    else:
+                        # Fallback: intentar obtener el campo 'anexo' antiguo si existe
+                        texto_anexos = anexo_data.get("anexo", "")
+                    self._formatear_celda(row_cells[5], texto_anexos)
         
         print(f"[INFO] Tabla actualizada: {len(tabla_existente.rows)} filas totales (1 encabezado + {len(self.obligaciones_anexos_raw)} datos)")
     
