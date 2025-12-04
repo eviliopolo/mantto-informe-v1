@@ -40,6 +40,8 @@ class AuthController:
         """
         email = credentials.get("username")
         password = credentials.get("password")
+
+        print(email, password)
         
         if not email or not password:
             raise HTTPException(
