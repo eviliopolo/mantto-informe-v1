@@ -32,7 +32,8 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
         "anio": anio, 
         "mes": mes,  
         "name_file": name_file,
-        "level": 1,      
+        "level": 1,  
+        "preloaded": False,    
         "created_at": datetime_now,
         "updated_at": datetime_now,
         "user_created": user_created,
@@ -42,6 +43,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2",
                 "level": 1,
                 "title": "2. INFORME DE MESA DE SERVICIO",
+                "preloaded": False,
                 "content": {                    
                     "image": "",                    
                 },
@@ -54,6 +56,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.1",
                 "level": 2,
                 "title": "2.1 INFORME DE MESA DE SERVICIO",
+                "preloaded": False,
                 "content": {
                     "route": "",      
                     "image": "",    
@@ -73,6 +76,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.2",
                 "level": 2,
                 "title": "HERRAMIENTAS DE TRABAJO",
+                "preloaded": False,
                 "content": {
                     "email": "ergrodz@etb.com.co",
                 },
@@ -85,6 +89,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.3",
                 "level": 2,
                 "title": "VISITAS DE DIAGNÓSTICOS A SUBSISTEMAS",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"subsistema": "" , "ejecutadas": ""}
@@ -101,6 +106,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.4",
                 "level": 2,
                 "title": "INFORME CONSOLIDADO DEL ESTADO DE LOS TICKETS ADMINISTRATIVOS",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"subsistema": "" , "diagnostico": "" , "diagnostico_subsistema": "" , "limpieza_acrilico": "" , "mto_acometida": "" , "mto_correctivo": "" , "mto_correctivo_subsistema": "" , "plan_de_choque": "" , "total": ""}                        
@@ -119,10 +125,15 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5",
                 "level": 2,
                 "title": "ESCALAMIENTOS",
+                "preloaded": False,
                 "content": {
                     "table_1": [
-                        {"escalamiento": "" , "cantidad": ""}
-                    ]
+                        {"escalamiento": "ENEL", "cantidad": ""},
+                        {"escalamiento": "CAÍDA MASIVA", "cantidad": ""},
+                        {"escalamiento": "CONECTIVIDAD", "cantidad": ""},
+                        {"escalamiento": "TOTAL", "cantidad": ""}
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -133,10 +144,12 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5.1",
                 "level": 3,
                 "title": "ENEL",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"item": "" , "codigo_punto": "" , "ticket_enel": "" , "fecha_escalamiento": "" , "ticket_glpi": ""}
-                    ]                    
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -147,10 +160,12 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5.2",
                 "level": 3,
                 "title": "CAÍDA MASIVA",
+                "preloaded": False,
                 "content": {
                     "table_1": [                        
                         {"item": "" , "punto": "" , "localidad": "" , "cav": "" , "fecha": "" , "consecutivo_caida": ""}
-                    ]                    
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -161,10 +176,12 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5.3",
                 "level": 3,
                 "title": "CONECTIVIDAD",
+                "preloaded": False,
                 "content": {
                     "table_1": [                        
                         {"item": "" , "codigo_punto": "" , "ticket_etb": "" , "fecha_escalamiento": "" , "ticket_glpi": ""}
-                    ]                    
+                    ],
+                    "ruta_excel": ""
                 },
                 "user_created": 1,
                 "user_updated": 1,
@@ -175,6 +192,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.6",
                 "level": 2,
                 "title": "INFORME ACTUALIZADO DE HOJAS DE VIDA DE LOS PUNTOS Y SUBSISTEMAS DE VIDEO VIGILANCIA",
+                "preloaded": False,
                 "content": {
                     "name_document": "",
                 },
@@ -187,21 +205,49 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.7",
                 "level": 2,
                 "title": "INFORME EJECUTIVO DEL ESTADO DEL SISTEMA",
+                "preloaded": False,
                 "content": {
                     "table_1": [
-                        {"estado": "" , "cantidad": ""}
+                        {"estado": "CAÍDA MASIVA", "cantidad": ""},
+                        {"estado": "FUERA DE SERVICIO", "cantidad": ""},
+                        {"estado": "OPERATIVA", "cantidad": ""},
+                        {"estado": "OPERATIVA CON NOVEDAD", "cantidad": ""},
+                        {"estado": "TOTAL", "cantidad": ""}
                     ],
+                    "cantidades_estado": {},
                     "image": "",
                     "section_1": "",
                     "section_2": "",
                     "table_2": [
-                        {"responsable": "" , "cantidad": ""}
+                        {"responsable": "PTE APROBACIÓN USO DE BOLSA", "cantidad": ""},
+                        {"responsable": "CONECTIVIDAD", "cantidad": ""},
+                        {"responsable": "MANTENIMIENTO", "cantidad": ""},
+                        {"responsable": "SINIESTRO", "cantidad": ""},
+                        {"responsable": "ENERGIZACIÓN", "cantidad": ""},
+                        {"responsable": "OBRAS", "cantidad": ""},
+                        {"responsable": "PUNTO DESMONTADO", "cantidad": ""},
+                        {"responsable": "ENEL", "cantidad": ""},
+                        {"responsable": "TOTAL", "cantidad": ""}
                     ],
+                    "cantidades_responsable": {},
                     "section_3": "",
                     "table_3": [
-                        {"subsistema": "" , "caida_masiva": "" , "fuera_de_servicio": "" , "operativa": "" , "operativa_con_novedad": "" , "total": ""}                        
+                        {"subsistema": "ESTACIONES DE POLICÍA", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO 350", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO 732", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO ALCALDÍA", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO CAI", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO COLEGIOS", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO CTP", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO ESU-C4", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO ESU-ESTADIO", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO FVS", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "PROYECTO TRANSMILENIO", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""},
+                        {"subsistema": "TOTAL", "caida_masiva": "", "fuera_de_servicio": "", "operativa": "", "operativa_con_novedad": "", "total": ""}
                     ],
+                    "datos_subsistemas": {},
                     "name_document": "",
+                    "observaciones": "",
                 },
                 "user_created": 1,
                 "user_updated": 1,

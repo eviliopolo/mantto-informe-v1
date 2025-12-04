@@ -8,6 +8,9 @@ import tempfile
 import requests
 from requests.auth import HTTPBasicAuth
 from urllib.parse import urlparse, quote
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Cargar variables de entorno desde .env
 try:
@@ -23,7 +26,7 @@ try:
     OFFICE365_DISPONIBLE = True
 except ImportError:
     OFFICE365_DISPONIBLE = False
-    print("[WARNING] Office365-REST-Python-Client no está disponible. Usando método alternativo con requests.")
+    logger.warning("Office365-REST-Python-Client no está disponible. Usando método alternativo con requests.")
 
 
 class SharePointExtractor:
@@ -71,10 +74,10 @@ class SharePointExtractor:
                         self.client_id, self.client_secret
                     )
                 else:
-                    print("[WARNING] SHAREPOINT_CLIENT_ID y SHAREPOINT_CLIENT_SECRET son requeridos")
+                    logger.warning("SHAREPOINT_CLIENT_ID y SHAREPOINT_CLIENT_SECRET son requeridos")
                     self.ctx = None
             except Exception as e:
-                print(f"[WARNING] Error al inicializar SharePoint: {e}")
+                logger.warning(f"Error al inicializar SharePoint: {e}")
                 self.ctx = None
     
     def descargar_archivo(self, ruta_sharepoint: str, archivo_destino: Optional[Path] = None) -> Optional[Path]:
@@ -154,7 +157,6 @@ class SharePointExtractor:
                 # Agregar la ruta del archivo
                 ruta_archivo_clean = ruta_sharepoint.lstrip('/')
                 server_relative_url = '/' + '/'.join(path_parts) + '/' + ruta_archivo_clean
-                print(f"[DEBUG] SharePoint - Ruta relativa del servidor construida: {server_relative_url}")
             else:
                 # Fallback
                 server_relative_url = '/' + ruta_sharepoint.lstrip('/')
@@ -175,24 +177,20 @@ class SharePointExtractor:
                 if resultado:
                     return resultado
                 # Si Office365 falla, intentar con requests como fallback
-                print(f"[INFO] Office365 falló, intentando método alternativo con requests...")
+                logger.info("Office365 falló, intentando método alternativo con requests...")
             
             # Método 2: Usar requests con autenticación OAuth
             # Usar server_relative_url para construir la URL de API REST
             # No usar url_archivo porque puede tener la ruta duplicada
-            print(f"[DEBUG] Intentando descargar con requests usando server_relative_url: {server_relative_url}")
             return self._descargar_con_requests(server_relative_url, archivo_destino)
             
         except Exception as e:
-            print(f"[WARNING] Error al descargar archivo desde SharePoint: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(f"Error al descargar archivo desde SharePoint: {e}")
             return None
     
     def _descargar_con_office365(self, server_relative_url: str, archivo_destino: Path) -> Optional[Path]:
         """Descarga usando Office365-REST-Python-Client"""
         try:
-            print(f"[DEBUG] Intentando descargar con Office365: {server_relative_url}")
             # Obtener archivo usando ruta relativa del servidor
             file = self.ctx.web.get_file_by_server_relative_url(server_relative_url)
             self.ctx.load(file)
@@ -203,20 +201,11 @@ class SharePointExtractor:
                 file.download(f)
                 self.ctx.execute_query()
             
-            print(f"[INFO] Archivo descargado exitosamente con Office365: {archivo_destino}")
+            logger.info(f"Archivo descargado exitosamente con Office365: {archivo_destino}")
             return archivo_destino
         except Exception as e:
             error_msg = str(e)
-            print(f"[WARNING] Error con Office365: {error_msg}")
-            
-            # Si es error 403, podría ser problema de permisos o ruta incorrecta
-            if "403" in error_msg or "Forbidden" in error_msg:
-                print(f"[INFO] Error 403 Forbidden - Posibles causas:")
-                print(f"  1. La App Registration no tiene permisos suficientes")
-                print(f"  2. La ruta del archivo no es correcta: {server_relative_url}")
-                print(f"  3. El archivo no existe en esa ubicación")
-                print(f"[INFO] Intentando método alternativo con requests...")
-            
+            logger.warning(f"Error con Office365: {error_msg}")
             return None
     
     def _descargar_con_requests(self, server_relative_url: str, archivo_destino: Path) -> Optional[Path]:
@@ -224,13 +213,13 @@ class SharePointExtractor:
         try:
             # Obtener token OAuth con App Registration
             if not self.client_id or not self.client_secret:
-                print("[WARNING] SHAREPOINT_CLIENT_ID y SHAREPOINT_CLIENT_SECRET son requeridos")
+                logger.warning("SHAREPOINT_CLIENT_ID y SHAREPOINT_CLIENT_SECRET son requeridos")
                 return None
             
             # Intentar primero con SharePoint REST API
             token = self._obtener_token_oauth(usar_microsoft_graph=False)
             if not token:
-                print("[WARNING] No se pudo obtener token OAuth para SharePoint")
+                logger.warning("No se pudo obtener token OAuth para SharePoint")
                 return None
             
             # Construir URL de API REST usando server_relative_url
@@ -241,8 +230,6 @@ class SharePointExtractor:
             
             # Construir URL de API REST
             api_url = f"{self.site_url.rstrip('/')}/_api/web/GetFileByServerRelativeUrl('{quote(server_relative_url, safe='')}')/$value"
-            
-            print(f"[DEBUG] Descargando desde SharePoint REST API: {api_url}")
             
             # Headers con token OAuth
             headers = {
@@ -257,33 +244,13 @@ class SharePointExtractor:
             if response.status_code == 401:
                 error_text = response.text
                 if "Unsupported app only token" in error_text or "app only" in error_text.lower():
-                    print(f"[INFO] SharePoint REST API no acepta tokens de aplicación, intentando con Microsoft Graph API...")
+                    logger.info("SharePoint REST API no acepta tokens de aplicación, intentando con Microsoft Graph API...")
                     return self._descargar_con_microsoft_graph(server_relative_url, archivo_destino)
                 
-                print(f"[ERROR] 401 Unauthorized - El token OAuth no tiene permisos suficientes")
-                print(f"[INFO] Ruta intentada: {server_relative_url}")
-                print(f"[INFO] Verifica:")
-                print(f"  1. Que la App Registration tenga permisos de SharePoint (no solo Microsoft Graph)")
-                print(f"  2. En Azure Portal > App registrations > API permissions:")
-                print(f"     - Agregar permisos de 'SharePoint' (no Microsoft Graph)")
-                print(f"     - Seleccionar 'Application permissions'")
-                print(f"     - Agregar: Sites.Read.All o Sites.ReadWrite.All")
-                print(f"     - Dar 'Grant admin consent'")
-                print(f"  3. Esperar unos minutos después de otorgar permisos para que se propaguen")
-                # Intentar obtener detalles del error
-                try:
-                    error_detail = response.text[:500]
-                    print(f"[DEBUG] Detalle del error 401: {error_detail}")
-                except:
-                    pass
+                logger.error(f"401 Unauthorized - El token OAuth no tiene permisos suficientes. Ruta: {server_relative_url}")
                 return None
             elif response.status_code == 403:
-                print(f"[ERROR] 403 Forbidden - La App Registration no tiene permisos o la ruta es incorrecta")
-                print(f"[INFO] Ruta intentada: {server_relative_url}")
-                print(f"[INFO] Verifica:")
-                print(f"  1. Que la App Registration tenga permisos de lectura en SharePoint")
-                print(f"  2. Que la ruta del archivo sea correcta")
-                print(f"  3. Que el archivo exista en esa ubicación")
+                logger.error(f"403 Forbidden - La App Registration no tiene permisos o la ruta es incorrecta. Ruta: {server_relative_url}")
                 return None
             
             response.raise_for_status()
@@ -293,11 +260,11 @@ class SharePointExtractor:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             
-            print(f"[INFO] Archivo descargado exitosamente con SharePoint REST API: {archivo_destino}")
+            logger.info(f"Archivo descargado exitosamente con SharePoint REST API: {archivo_destino}")
             return archivo_destino
             
         except Exception as e:
-            print(f"[WARNING] Error con requests: {e}")
+            logger.warning(f"Error con requests: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -344,39 +311,29 @@ class SharePointExtractor:
             
             from urllib.parse import quote
             site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/{quote(site_path, safe='')}"
-            print(f"[DEBUG] Obteniendo site-id desde: {site_url}")
-            
             site_response = requests.get(site_url, headers=headers)
             if site_response.status_code != 200:
-                print(f"[ERROR] No se pudo obtener site-id (status {site_response.status_code})")
-                try:
-                    error_detail = site_response.json()
-                    print(f"[DEBUG] Detalle del error: {error_detail}")
-                except:
-                    print(f"[DEBUG] Respuesta: {site_response.text[:500]}")
+                logger.error(f"No se pudo obtener site-id (status {site_response.status_code})")
                 return None
             
             site_data = site_response.json()
             site_id = site_data.get('id')
             if not site_id:
-                print(f"[ERROR] No se encontró site-id en la respuesta")
+                logger.error("No se encontró site-id en la respuesta")
                 return None
-            
-            print(f"[DEBUG] Site ID obtenido: {site_id}")
             
             # Paso 2: Obtener el drive-id (el drive de "Shared Documents")
             drives_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives"
-            print(f"[DEBUG] Obteniendo drive-id desde: {drives_url}")
             
             drives_response = requests.get(drives_url, headers=headers)
             if drives_response.status_code != 200:
-                print(f"[ERROR] No se pudo obtener drive-id (status {drives_response.status_code})")
+                logger.error(f"No se pudo obtener drive-id (status {drives_response.status_code})")
                 return None
             
             drives_data = drives_response.json()
             drives = drives_data.get('value', [])
             if not drives:
-                print(f"[ERROR] No se encontraron drives en el sitio")
+                logger.error("No se encontraron drives en el sitio")
                 return None
             
             # Buscar el drive de "Shared Documents" o usar el primero
@@ -388,8 +345,6 @@ class SharePointExtractor:
             
             if not drive_id:
                 drive_id = drives[0].get('id')  # Usar el primer drive si no encontramos "Shared Documents"
-            
-            print(f"[DEBUG] Drive ID obtenido: {drive_id}")
             
             # Paso 3: Obtener el archivo
             # Extraer la ruta del archivo relativa al drive
@@ -408,22 +363,16 @@ class SharePointExtractor:
                     file_path = server_relative_url.lstrip('/')
             
             file_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{quote(file_path, safe='')}:/content"
-            print(f"[DEBUG] Descargando archivo desde: {file_url}")
             
             # Cambiar Accept header para descargar el contenido binario
             headers['Accept'] = "application/octet-stream"
             response = requests.get(file_url, headers=headers, stream=True)
             
             if response.status_code == 401:
-                print(f"[ERROR] 401 Unauthorized - El token OAuth no tiene permisos para Microsoft Graph")
-                print(f"[INFO] Verifica que la App Registration tenga permisos de Microsoft Graph:")
-                print(f"  - Sites.Read.All o Sites.ReadWrite.All")
-                print(f"  - Files.Read.All o Files.ReadWrite.All")
+                logger.error("401 Unauthorized - El token OAuth no tiene permisos para Microsoft Graph")
                 return None
             elif response.status_code == 404:
-                print(f"[ERROR] 404 Not Found - El archivo no existe en la ruta especificada")
-                print(f"[INFO] Ruta intentada: {file_path}")
-                print(f"[INFO] URL completa: {file_url}")
+                logger.error(f"404 Not Found - El archivo no existe en la ruta especificada: {file_path}")
                 return None
             
             response.raise_for_status()
@@ -433,13 +382,11 @@ class SharePointExtractor:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             
-            print(f"[INFO] Archivo descargado exitosamente con Microsoft Graph API: {archivo_destino}")
+            logger.info(f"Archivo descargado exitosamente con Microsoft Graph API: {archivo_destino}")
             return archivo_destino
             
         except Exception as e:
-            print(f"[WARNING] Error con Microsoft Graph API: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(f"Error con Microsoft Graph API: {e}")
             return None
     
     def _obtener_token_oauth(self, usar_microsoft_graph: bool = False) -> Optional[str]:
@@ -462,14 +409,12 @@ class SharePointExtractor:
             if self.tenant_id:
                 # Usar Tenant ID directamente (más confiable para permisos de aplicación)
                 tenant = self.tenant_id
-                print(f"[DEBUG] Usando Tenant ID configurado: {tenant[:8]}...")
             else:
                 # Extraer tenant del dominio como fallback
                 # Formato: https://{tenant}.sharepoint.com/sites/...
                 parsed = urlparse(self.site_url)
                 domain = parsed.netloc  # ej: verytelcsp.sharepoint.com
                 tenant = domain.split('.')[0]  # ej: verytelcsp
-                print(f"[DEBUG] Tenant extraído del dominio: {tenant}")
             
             # Para permisos de aplicación, usar el tenant específico
             token_url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
@@ -478,7 +423,6 @@ class SharePointExtractor:
             if usar_microsoft_graph:
                 # Para Microsoft Graph API con permisos de aplicación
                 scope = "https://graph.microsoft.com/.default"
-                print(f"[DEBUG] Usando Microsoft Graph API (scope: {scope})")
             else:
                 # Para SharePoint REST API con permisos de aplicación
                 # NOTA: Si usamos Tenant ID, necesitamos el dominio del sitio para el scope
@@ -490,7 +434,6 @@ class SharePointExtractor:
                 else:
                     # Si no hay Tenant ID, usar el tenant extraído
                     scope = f"https://{tenant}.sharepoint.com/.default"
-                print(f"[DEBUG] Usando SharePoint REST API (scope: {scope})")
             
             # Datos para la solicitud con permisos de aplicación (client_credentials)
             data = {
@@ -500,62 +443,28 @@ class SharePointExtractor:
                 "grant_type": "client_credentials"
             }
             
-            print(f"[DEBUG] Intentando obtener token OAuth")
-            print(f"[DEBUG] Tenant: {tenant}")
-            print(f"[DEBUG] Scope: {scope}")
-            print(f"[DEBUG] Token URL: {token_url}")
-            print(f"[DEBUG] Grant type: client_credentials (permisos de aplicación)")
-            
             # Realizar solicitud
-            print(f"[DEBUG] Realizando solicitud OAuth...")
             response = requests.post(token_url, data=data)
             
             if response.status_code != 200:
-                print(f"[ERROR] ========== ERROR AL OBTENER TOKEN OAUTH ==========")
-                print(f"[ERROR] Status Code: {response.status_code}")
-                print(f"[ERROR] Token URL: {token_url}")
-                print(f"[ERROR] Client ID: {self.client_id[:20]}..." if self.client_id else "[ERROR] Client ID: None")
-                print(f"[ERROR] Client Secret: {'***' if self.client_secret else 'None'}")
-                print(f"[ERROR] Tenant: {tenant}")
-                print(f"[ERROR] Scope: {scope}")
+                logger.error(f"Error al obtener token OAuth (status {response.status_code})")
                 try:
                     error_detail = response.json()
-                    print(f"[ERROR] Detalle del error: {error_detail}")
-                    # Mostrar información útil del error
-                    if 'error_description' in error_detail:
-                        print(f"[ERROR] Descripción: {error_detail['error_description']}")
-                    if 'error' in error_detail:
-                        print(f"[ERROR] Tipo de error: {error_detail['error']}")
+                    error_desc = error_detail.get('error_description', 'N/A')
+                    error_type = error_detail.get('error', 'N/A')
+                    logger.error(f"Tipo de error: {error_type}, Descripción: {error_desc}")
                 except:
-                    print(f"[ERROR] Respuesta: {response.text[:500]}")
-                print(f"[ERROR] =================================================")
-                
-                print(f"[DEBUG] Información de la solicitud:")
-                print(f"  - Tenant: {tenant}")
-                print(f"  - Scope: {scope}")
-                print(f"  - Token URL: {token_url}")
-                print(f"  - Grant type: client_credentials")
-                print(f"  - Client ID: {self.client_id[:20]}...")
-                
+                    logger.error(f"Respuesta: {response.text[:500]}")
                 return None
             
             token_data = response.json()
             access_token = token_data.get("access_token")
-            if access_token:
-                print(f"[SUCCESS] ========== TOKEN OAUTH OBTENIDO EXITOSAMENTE ==========")
-                print(f"[SUCCESS] Token obtenido (longitud: {len(access_token)} caracteres)")
-                print(f"[SUCCESS] Token (primeros 30 caracteres): {access_token[:30]}...")
-                print(f"[SUCCESS] Token expira en: {token_data.get('expires_in', 'N/A')} segundos")
-                print(f"[SUCCESS] ======================================================")
-            else:
-                print(f"[ERROR] No se encontró access_token en la respuesta")
-                print(f"[ERROR] Respuesta recibida: {token_data}")
+            if not access_token:
+                logger.error(f"No se encontró access_token en la respuesta: {token_data}")
             return access_token
             
         except Exception as e:
-            print(f"[WARNING] Error al obtener token OAuth: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(f"Error al obtener token OAuth: {e}")
             return None
     
     def es_url_sharepoint(self, ruta: str) -> bool:
@@ -651,20 +560,20 @@ class SharePointExtractor:
             head_response = requests.head(file_url, headers=headers)
             
             if head_response.status_code == 200:
-                print(f"[INFO] Archivo existe en SharePoint: {ruta_sharepoint}")
+                logger.info(f"Archivo existe en SharePoint: {ruta_sharepoint}")
                 return True
             elif head_response.status_code == 404:
-                print(f"[WARNING] Archivo NO existe en SharePoint: {ruta_sharepoint}")
+                logger.warning(f"Archivo NO existe en SharePoint: {ruta_sharepoint}")
                 return False
             else:
-                print(f"[WARNING] Error al verificar archivo en SharePoint (status {head_response.status_code}): {ruta_sharepoint}")
+                logger.warning(f"Error al verificar archivo en SharePoint (status {head_response.status_code}): {ruta_sharepoint}")
                 return False
         
         except requests.exceptions.RequestException as e:
-            print(f"[WARNING] Error de red o HTTP al verificar archivo en SharePoint: {e}")
+            logger.warning(f"Error de red o HTTP al verificar archivo en SharePoint: {e}")
             return False
         except Exception as e:
-            print(f"[WARNING] Error inesperado al verificar archivo en SharePoint: {e}")
+            logger.warning(f"Error inesperado al verificar archivo en SharePoint: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -706,24 +615,11 @@ class SharePointExtractor:
             ]
         """
         try:
-            # Mostrar información de configuración
-            print("=" * 80)
-            print("[DEBUG] CONFIGURACIÓN SHAREPOINT:")
-            print(f"[DEBUG] Site URL: {self.site_url}")
-            print(f"[DEBUG] Base Path: '{self.base_path}'")
-            print(f"[DEBUG] Client ID: {self.client_id[:20]}..." if self.client_id else "[DEBUG] Client ID: None")
-            print(f"[DEBUG] Tenant ID: {self.tenant_id}")
-            print(f"[DEBUG] Ruta carpeta recibida: '{ruta_carpeta}'")
-            print("=" * 80)
-            
             # Construir ruta completa si hay base_path
             # IMPORTANTE: El base_path puede incluir "Shared Documents" o no
             # Cuando usamos /root:/ruta:/children, la ruta debe ser relativa al drive root
             # Si el base_path incluye "Shared Documents", debemos removerlo
             ruta_completa = ruta_carpeta
-            print(f"[DEBUG] ========== CONSTRUCCIÓN DE RUTA ==========")
-            print(f"[DEBUG] Ruta carpeta recibida: '{ruta_carpeta}'")
-            print(f"[DEBUG] Base Path configurado: '{self.base_path}'")
             
             if self.base_path:
                 # Normalizar base_path: remover "Shared Documents" si está al inicio
@@ -740,26 +636,12 @@ class SharePointExtractor:
                 carpeta = carpeta.replace(' / ', '/').replace(' /', '/').replace('/ ', '/')
                 
                 ruta_completa = f"{base}/{carpeta}" if base and carpeta else (base or carpeta)
-                print(f"[DEBUG] Base Path normalizado (sin 'Shared Documents'): '{base}'")
-                print(f"[DEBUG] Ruta completa construida: '{ruta_completa}'")
-            else:
-                print(f"[DEBUG] No hay base_path configurado, usando ruta directa")
-                print(f"[DEBUG] Ruta final: '{ruta_completa}'")
-            print(f"[DEBUG] =========================================")
             
             # Obtener token OAuth para Microsoft Graph
-            print("[DEBUG] Obteniendo token OAuth para Microsoft Graph...")
             token = self._obtener_token_oauth(usar_microsoft_graph=True)
             if not token:
-                print("[ERROR] No se pudo obtener token OAuth para Microsoft Graph")
-                print("[ERROR] Verifica las credenciales en .env:")
-                print("[ERROR]   - SHAREPOINT_CLIENT_ID")
-                print("[ERROR]   - SHAREPOINT_CLIENT_SECRET")
-                print("[ERROR]   - SHAREPOINT_TENANT_ID (opcional)")
+                logger.error("No se pudo obtener token OAuth para Microsoft Graph. Verifica las credenciales en .env")
                 return []
-            else:
-                print(f"[DEBUG] Token OAuth obtenido exitosamente (longitud: {len(token)} caracteres)")
-                print(f"[DEBUG] Token (primeros 20 caracteres): {token[:20]}...")
             
             # Construir la URL para obtener el site-id
             parsed = urlparse(self.site_url)
@@ -779,13 +661,13 @@ class SharePointExtractor:
             )
             
             if site_response.status_code != 200:
-                print(f"[ERROR] No se pudo obtener site-id (status {site_response.status_code})")
+                logger.error(f"No se pudo obtener site-id (status {site_response.status_code})")
                 return []
             
             site_data = site_response.json()
             site_id = site_data.get('id')
             if not site_id:
-                print("[ERROR] No se encontró site-id en la respuesta")
+                logger.error("No se encontró site-id en la respuesta")
                 return []
             
             # Paso 2: Obtener drive-id
@@ -793,13 +675,13 @@ class SharePointExtractor:
             drives_response = requests.get(drives_url, headers=headers)
             
             if drives_response.status_code != 200:
-                print(f"[ERROR] No se pudo obtener drive-id (status {drives_response.status_code})")
+                logger.error(f"No se pudo obtener drive-id (status {drives_response.status_code})")
                 return []
             
             drives_data = drives_response.json()
             drives = drives_data.get('value', [])
             if not drives:
-                print("[ERROR] No se encontraron drives en el sitio")
+                logger.error("No se encontraron drives en el sitio")
                 return []
             
             # Buscar el drive de "Shared Documents" o usar el primero
@@ -826,64 +708,25 @@ class SharePointExtractor:
             elif ruta_normalizada.startswith('Shared Documents'):
                 ruta_normalizada = ruta_normalizada[len('Shared Documents'):].lstrip('/')
             
-            print(f"[DEBUG] Ruta después de remover 'Shared Documents': '{ruta_normalizada}'")
-            
-            print(f"[DEBUG] Ruta original recibida: '{ruta_carpeta}'")
-            print(f"[DEBUG] Ruta normalizada: '{ruta_normalizada}'")
-            print(f"[DEBUG] Site ID: {site_id}")
-            print(f"[DEBUG] Drive ID: {drive_id}")
-            
             # Paso 4: Listar archivos en la carpeta
             # Usar el endpoint de children de la carpeta
             # La ruta debe estar codificada correctamente para URL
             ruta_codificada = quote(ruta_normalizada, safe='')
             carpeta_url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:/{ruta_codificada}:/children"
             
-            print(f"[DEBUG] ========== URL FINAL PARA LISTAR ARCHIVOS ==========")
-            print(f"[DEBUG] Site ID: {site_id}")
-            print(f"[DEBUG] Drive ID: {drive_id}")
-            print(f"[DEBUG] Ruta normalizada: '{ruta_normalizada}'")
-            print(f"[DEBUG] Ruta codificada: '{ruta_codificada}'")
-            print(f"[DEBUG] URL completa: {carpeta_url}")
-            print(f"[DEBUG] Token presente en headers: {'Sí' if token else 'No'}")
-            print(f"[DEBUG] ====================================================")
-            
             archivos = []
             next_link = carpeta_url
             
             # Manejar paginación si hay muchos archivos
             while next_link:
-                print(f"[DEBUG] Realizando petición GET a: {next_link}")
-                print(f"[DEBUG] Headers enviados:")
-                print(f"[DEBUG]   Authorization: Bearer {token[:30]}..." if token else "[DEBUG]   Authorization: None")
-                print(f"[DEBUG]   Accept: application/json")
-                
                 response = requests.get(next_link, headers=headers)
                 
-                print(f"[DEBUG] Respuesta recibida:")
-                print(f"[DEBUG]   Status Code: {response.status_code}")
-                if response.status_code != 200:
-                    print(f"[DEBUG]   Respuesta (primeros 500 chars): {response.text[:500]}")
-                
                 if response.status_code == 404:
-                    print(f"[ERROR] La carpeta no existe (404): '{ruta_normalizada}'")
-                    print(f"[ERROR] URL intentada: {next_link}")
-                    try:
-                        error_detail = response.json()
-                        print(f"[ERROR] Detalle del error: {error_detail}")
-                    except:
-                        print(f"[ERROR] Respuesta del servidor: {response.text[:500]}")
+                    logger.error(f"La carpeta no existe (404): '{ruta_normalizada}'")
                     return []
                 
                 if response.status_code != 200:
-                    print(f"[ERROR] No se pudieron listar archivos (status {response.status_code})")
-                    print(f"[ERROR] URL intentada: {next_link}")
-                    print(f"[ERROR] Ruta normalizada: '{ruta_normalizada}'")
-                    try:
-                        error_detail = response.json()
-                        print(f"[ERROR] Detalle del error: {error_detail}")
-                    except:
-                        print(f"[ERROR] Respuesta del servidor: {response.text[:500]}")
+                    logger.error(f"No se pudieron listar archivos (status {response.status_code})")
                     return []
                 
                 data = response.json()
@@ -908,17 +751,11 @@ class SharePointExtractor:
                 # Verificar si hay más páginas
                 next_link = data.get('@odata.nextLink')
             
-            print(f"[INFO] Se encontraron {len(archivos)} archivos en la carpeta '{ruta_normalizada}'")
-            if len(archivos) > 0:
-                print(f"[DEBUG] Primeros archivos encontrados:")
-                for i, archivo in enumerate(archivos[:5], 1):
-                    print(f"  {i}. {archivo.get('nombre', 'N/A')} - {archivo.get('ruta_completa', 'N/A')}")
+            logger.info(f"Se encontraron {len(archivos)} archivos en la carpeta '{ruta_normalizada}'")
             return archivos
             
         except Exception as e:
-            print(f"[WARNING] Error al listar archivos en carpeta: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(f"Error al listar archivos en carpeta: {e}")
             return []
 
 

@@ -1,9 +1,10 @@
 """
-Utilidades para manipulación de documentos Word
+Utilidades para manipulación de documentos Word y URLs de SharePoint
 """
 from pathlib import Path
 from typing import List
 from docx import Document
+from urllib.parse import urlparse, unquote
 
 def combinar_documentos(archivos: List[Path], archivo_salida: Path) -> None:
     """
@@ -50,5 +51,37 @@ def aplicar_estilo_titulo(parrafo, nivel: int = 1) -> None:
     """
     estilo = f"Heading {min(nivel, 9)}"
     parrafo.style = estilo
+
+
+def convertir_url_sharepoint_a_ruta_relativa(url_completa: str) -> str:
+    """
+    Convierte una URL completa de SharePoint a ruta relativa del servidor.
+    
+    Args:
+        url_completa: URL completa de SharePoint (ej: https://...)
+        
+    Returns:
+        Ruta relativa del servidor (ej: /sites/OPERACIONES/Shared Documents/...)
+    """
+    if not url_completa.startswith("http://") and not url_completa.startswith("https://"):
+        # Ya es una ruta relativa, retornarla tal cual
+        return url_completa
+    
+    # Parsear la URL y decodificar los caracteres codificados
+    url_parsed = urlparse(url_completa)
+    # Decodificar el path para obtener los caracteres reales (ej: %20 -> espacio, %C3%B1o -> año)
+    path_decodificado = unquote(url_parsed.path)
+    path_parts = [p for p in path_decodificado.split('/') if p]  # Eliminar vacíos
+    
+    # Encontrar el índice de 'sites', 'teams' o 'personal'
+    try:
+        idx = next(i for i, part in enumerate(path_parts) if part in ['sites', 'teams', 'personal'])
+        # Construir ruta relativa: /sites/... o /teams/... o /personal/...
+        server_relative_url = '/' + '/'.join(path_parts[idx:])
+        return server_relative_url
+    except StopIteration:
+        # Si no encuentra, usar toda la ruta después del dominio (ya decodificada)
+        server_relative_url = path_decodificado if path_decodificado.startswith('/') else '/' + path_decodificado
+        return server_relative_url
 
 

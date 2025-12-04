@@ -47,6 +47,29 @@ class Section2Controller:
             
             """ EVALUAMOS A QUE SECCION SE REQUIERE ACTUALIZAR """
             id_section = data.get("section_id")
+            
+            # Obtener el documento para pasar el campo preloaded al generador
+            anio = data.get("anio")
+            mes = data.get("mes")
+            
+            # Si el usuario envía explícitamente preloaded en el request, usar ese valor
+            # De lo contrario, obtenerlo de la base de datos
+            if "preloaded" in data:
+                preloaded = data.get("preloaded", False)
+                logger.info(f"Sección {id_section}: usando preloaded del request: {preloaded}")
+            else:
+                # Si no viene en el request, obtenerlo de la base de datos
+                document_data = await self.service.get_all_section({"anio": anio, "mes": mes})
+                preloaded = False
+                if document_data and document_data.get("index"):
+                    for item in document_data.get("index", []):
+                        if item.get("id") == id_section:
+                            preloaded = item.get("preloaded", False)
+                            break
+                logger.info(f"Sección {id_section}: usando preloaded de BD: {preloaded}")
+            
+            # Agregar el campo preloaded a los datos que se pasan al generador
+            data["preloaded"] = preloaded
 
             if id_section == "2":
                 data_section = self.generador._seccion_2(data)
@@ -57,17 +80,17 @@ class Section2Controller:
             elif id_section == "2.3":
                 data_section = await self.generador._seccion_2_3_visitas_diagnostico(data)
             elif id_section == "2.4":
-                data_section = self.generador._seccion_2_4_tickets(data)
+                data_section = await self.generador._seccion_2_4_tickets(data)
             elif id_section == "2.5":
-                data_section = self.generador._seccion_2_5_escalamientos(data)
+                data_section = await self.generador._seccion_2_5_escalamientos(data)
             elif id_section == "2.5.1":
-                data_section = self.generador._seccion_2_5_1_enel(data)
+                data_section = await self.generador._seccion_2_5_1_enel(data)
             elif id_section == "2.5.2":
-                data_section = self.generador._seccion_2_5_2_caida_masiva(data)
+                data_section = await self.generador._seccion_2_5_2_caida_masiva(data)
             elif id_section == "2.5.3":
-                data_section = self.generador._seccion_2_5_3_conectividad(data)
+                data_section = await self.generador._seccion_2_5_3_conectividad(data)
             elif id_section == "2.6":
-                data_section = self.generador._seccion_2_6_hojas_vida(data)
+                data_section = await self.generador._seccion_2_6_hojas_vida(data)
             elif id_section == "2.7":
                 data_section = self.generador._seccion_2_7_estado_sistema(data)
             else:

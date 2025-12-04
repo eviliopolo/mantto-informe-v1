@@ -350,3 +350,9 @@ GLPI_MYSQL_USER = os.getenv("GLPI_MYSQL_USER", "")
 GLPI_MYSQL_PASSWORD = os.getenv("GLPI_MYSQL_PASSWORD", "")
 GLPI_MYSQL_DATABASE = os.getenv("GLPI_MYSQL_DATABASE", "glpi")
 
+# Lista de meses en español (para compatibilidad)
+MESES_LISTA = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+]
+

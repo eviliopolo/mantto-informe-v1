@@ -112,7 +112,8 @@ try:
     from src.routes import section2_routes
     app.include_router(section2_routes.router, prefix="/api")
     logger.info("✓ Rutas de sección 2 incluidas")
-except ImportError:
+except Exception as e:
+    logger.error(f"Error al incluir rutas de sección 2: {e}", exc_info=True)
     logger.info("Rutas de sección 2 no disponibles")
 
 try:
