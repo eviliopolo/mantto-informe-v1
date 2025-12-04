@@ -60,7 +60,7 @@ async def get_inventario(
     anio: int = Query(..., description="Año del inventario"),
     mes: int = Query(..., description="Mes del inventario (1-12)"),
     seccion: str = Query("4", description="Sección del inventario"),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -78,7 +78,7 @@ async def get_inventario(
 @router.put("/subseccion", status_code=status.HTTP_200_OK)
 async def update_subseccion(
     data: Dict[str, Any] = Body(...),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -117,7 +117,7 @@ async def update_subseccion(
 @router.put("/subseccion/tabla", status_code=status.HTTP_200_OK)
 async def update_tabla(
     data: Dict[str, Any] = Body(...),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -159,7 +159,7 @@ async def update_tabla(
 async def get_subseccion_41(
     anio: int = Query(..., description="Año del inventario"),
     mes: int = Query(..., description="Mes del inventario (1-12)"),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -187,7 +187,7 @@ async def get_subseccion_41(
 @router.put("/4.1", status_code=status.HTTP_200_OK)
 async def update_subseccion_41(
     data: Dict[str, Any] = Body(...),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -217,7 +217,7 @@ async def update_subseccion_41(
 async def get_subseccion_42(
     anio: int = Query(..., description="Año del inventario"),
     mes: int = Query(..., description="Mes del inventario (1-12)"),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -246,7 +246,7 @@ async def get_subseccion_42(
 @router.put("/4.2", status_code=status.HTTP_200_OK)
 async def update_subseccion_42(
     data: Dict[str, Any] = Body(...),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -281,7 +281,7 @@ async def update_subseccion_42(
 async def get_subseccion_43(
     anio: int = Query(..., description="Año del inventario"),
     mes: int = Query(..., description="Mes del inventario (1-12)"),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -336,7 +336,7 @@ async def get_subseccion_43(
 @router.put("/4.3", status_code=status.HTTP_200_OK)
 async def update_subseccion_43(
     data: Dict[str, Any] = Body(...),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -390,7 +390,7 @@ async def update_subseccion_43(
 async def get_subseccion_44(
     anio: int = Query(..., description="Año del inventario"),
     mes: int = Query(..., description="Mes del inventario (1-12)"),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
@@ -430,7 +430,7 @@ async def get_subseccion_44(
 @router.put("/4.4", status_code=status.HTTP_200_OK)
 async def update_subseccion_44(
     data: Dict[str, Any] = Body(...),
-    token_payload: dict = Depends(auth_middleware),
+    #token_payload: dict = Depends(auth_middleware),
     db: AsyncIOMotorDatabase = Depends(get_database)
 ) -> Dict[str, Any]:
     """
