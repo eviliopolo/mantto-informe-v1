@@ -38,6 +38,7 @@ class User(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     email: EmailStr = Field(..., description="Email del usuario")
     username: str = Field(..., description="Username del usuario")
+    password: Optional[str] = Field(None, description="Hash de la contraseña (no se expone en respuestas)")
     access_role_id: Optional[PyObjectId] = Field(None, description="ID del rol de acceso")
     access_role_name: Optional[str] = Field(None, description="Nombre del rol de acceso")
     modules: Optional[List[str]] = Field(default=[], description="Lista de módulos asignados")

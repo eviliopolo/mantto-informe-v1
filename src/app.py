@@ -123,6 +123,13 @@ except ImportError:
     logger.info("Rutas de autenticación no disponibles")
 
 try:
+    from src.routes import inventario_routes
+    app.include_router(inventario_routes.router, prefix="/api")
+    logger.info("✓ Rutas de inventario (sección 4) incluidas")
+except Exception as e:
+    logger.warning(f"No se pudieron incluir rutas de inventario: {e}")
+
+try:
     from src.routes import seccion5_routes
     app.include_router(seccion5_routes.router)
     logger.info("✓ Rutas de sección 5 (laboratorio) incluidas")

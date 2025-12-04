@@ -30,13 +30,13 @@ INFORMES_APROBADOS_DIR = BASE_DIR / "docs" / "informesAprobados"
 # ============================================================================
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("API_PORT", "3000"))
+API_PORT = int(os.getenv("API_PORT", "8000"))
 
 # ============================================================================
 # CONFIGURACIÓN CORS
 # ============================================================================
 CORS_ORIGINS = os.getenv(
-    "CORS_ORIGINS", "http://localhost:5001,http://localhost:3000,http://localhost:5173"
+    "CORS_ORIGINS", "http://localhost:5001,http://localhost:3000,http://localhost:5173,http://localhost:8000"
 ).split(",")
 
 # ============================================================================
