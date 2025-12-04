@@ -1,8 +1,8 @@
 """
 Rutas para la Sección 2: Informe de Mesa de Servicio
 """
-from typing import Dict, Any
-from fastapi import APIRouter, status, Body
+from typing import Dict, Any, Optional
+from fastapi import APIRouter, status, Body, Query
 from ..controllers.section2_controller import Section2Controller
 
 router = APIRouter(prefix="/section2", tags=["Sección 2 - Mesa de Servicio"])
@@ -20,7 +20,7 @@ async def get_section_by_index(
     return await section2_controller.get_section_by_index(data)
 
 
-@router.get("/get_all_section", status_code=status.HTTP_200_OK)
+@router.post("/get_all_section", status_code=status.HTTP_200_OK)
 async def get_all_section(
     data: Dict[str, Any] = Body(...),    
 ) -> Dict[str, Any]:   

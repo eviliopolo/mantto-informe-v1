@@ -32,7 +32,8 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
         "anio": anio, 
         "mes": mes,  
         "name_file": name_file,
-        "level": 1,      
+        "level": 1,  
+        "preloaded": False,    
         "created_at": datetime_now,
         "updated_at": datetime_now,
         "user_created": user_created,
@@ -42,6 +43,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2",
                 "level": 1,
                 "title": "2. INFORME DE MESA DE SERVICIO",
+                "preloaded": False,
                 "content": {                    
                     "image": "",                    
                 },
@@ -54,6 +56,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.1",
                 "level": 2,
                 "title": "2.1 INFORME DE MESA DE SERVICIO",
+                "preloaded": False,
                 "content": {
                     "route": "",      
                     "image": "",    
@@ -73,6 +76,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.2",
                 "level": 2,
                 "title": "HERRAMIENTAS DE TRABAJO",
+                "preloaded": False,
                 "content": {
                     "email": "ergrodz@etb.com.co",
                 },
@@ -85,6 +89,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.3",
                 "level": 2,
                 "title": "VISITAS DE DIAGNÓSTICOS A SUBSISTEMAS",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"subsistema": "" , "ejecutadas": ""}
@@ -101,6 +106,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.4",
                 "level": 2,
                 "title": "INFORME CONSOLIDADO DEL ESTADO DE LOS TICKETS ADMINISTRATIVOS",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"subsistema": "" , "diagnostico": "" , "diagnostico_subsistema": "" , "limpieza_acrilico": "" , "mto_acometida": "" , "mto_correctivo": "" , "mto_correctivo_subsistema": "" , "plan_de_choque": "" , "total": ""}                        
@@ -119,6 +125,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5",
                 "level": 2,
                 "title": "ESCALAMIENTOS",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"escalamiento": "ENEL", "cantidad": ""},
@@ -137,6 +144,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5.1",
                 "level": 3,
                 "title": "ENEL",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"item": "" , "codigo_punto": "" , "ticket_enel": "" , "fecha_escalamiento": "" , "ticket_glpi": ""}
@@ -152,6 +160,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5.2",
                 "level": 3,
                 "title": "CAÍDA MASIVA",
+                "preloaded": False,
                 "content": {
                     "table_1": [                        
                         {"item": "" , "punto": "" , "localidad": "" , "cav": "" , "fecha": "" , "consecutivo_caida": ""}
@@ -167,6 +176,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.5.3",
                 "level": 3,
                 "title": "CONECTIVIDAD",
+                "preloaded": False,
                 "content": {
                     "table_1": [                        
                         {"item": "" , "codigo_punto": "" , "ticket_etb": "" , "fecha_escalamiento": "" , "ticket_glpi": ""}
@@ -182,6 +192,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.6",
                 "level": 2,
                 "title": "INFORME ACTUALIZADO DE HOJAS DE VIDA DE LOS PUNTOS Y SUBSISTEMAS DE VIDEO VIGILANCIA",
+                "preloaded": False,
                 "content": {
                     "name_document": "",
                 },
@@ -194,6 +205,7 @@ async def build_section2(anio: int, mes: int , user_id: int, name_file: str):
                 "id": "2.7",
                 "level": 2,
                 "title": "INFORME EJECUTIVO DEL ESTADO DEL SISTEMA",
+                "preloaded": False,
                 "content": {
                     "table_1": [
                         {"estado": "CAÍDA MASIVA", "cantidad": ""},

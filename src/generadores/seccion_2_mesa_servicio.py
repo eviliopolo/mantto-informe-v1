@@ -154,13 +154,20 @@ class GeneradorSeccion2:
 
     async def _seccion_2_1_mesa_servicio(self, data: Dict[str, Any]):
         
-        from src.services.glpi_service import get_glpi_service
-        glpi_service = await get_glpi_service()
-
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
-        table_2 = await glpi_service.get_actividades_por_subsistema(anio, mes)            
+        preloaded = data.get("preloaded", False)
+        
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            table_2 = content.get("table_2", [])
+            logger.info(f"Sección 2.1 ya precargada, usando datos existentes")
+        else:
+            # Obtener datos desde GLPI
+            from src.services.glpi_service import get_glpi_service
+            glpi_service = await get_glpi_service()
+            table_2 = await glpi_service.get_actividades_por_subsistema(anio, mes)            
         
         content_data = {
             "anio": anio,
@@ -199,16 +206,21 @@ class GeneradorSeccion2:
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
+        preloaded = data.get("preloaded", False)
         
-        # Obtener datos desde GLPI si no están en el content
-        table_1 = content.get("table_1", [])
-        if not table_1 and anio and mes:
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            table_1 = content.get("table_1", [])
+            logger.info(f"Sección 2.3 ya precargada, usando datos existentes")
+        else:
+            # Obtener datos desde GLPI (siempre cuando preloaded es False)
             try:
                 from src.services.glpi_service import get_glpi_service
                 glpi_service = await get_glpi_service()
                 table_1 = await glpi_service.get_visitas_diagnostico_subsistemas(anio, mes)
+                logger.info(f"Sección 2.3: Datos obtenidos desde GLPI para {anio}-{mes}")
             except Exception as e:
-                logger.warning(f"Error al obtener table_1 desde GLPI MySQL para sección 2.3: {e}. Usando datos de content.")
+                logger.warning(f"Error al obtener table_1 desde GLPI MySQL para sección 2.3: {e}. Usando datos de content como fallback.")
                 table_1 = content.get("table_1", [])
         
         content_data = {
@@ -231,11 +243,19 @@ class GeneradorSeccion2:
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
-
-        from src.services.glpi_service import get_glpi_service
-        glpi_service = await get_glpi_service()
-        table_1 = await glpi_service.get_actividades_por_subsistema(anio, mes) 
-        table_2 = await glpi_service.get_estado_tickets_por_subsistema(anio, mes)
+        preloaded = data.get("preloaded", False)
+        
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            table_1 = content.get("table_1", [])
+            table_2 = content.get("table_2", [])
+            logger.info(f"Sección 2.4 ya precargada, usando datos existentes")
+        else:
+            # Obtener datos desde GLPI
+            from src.services.glpi_service import get_glpi_service
+            glpi_service = await get_glpi_service()
+            table_1 = await glpi_service.get_actividades_por_subsistema(anio, mes) 
+            table_2 = await glpi_service.get_estado_tickets_por_subsistema(anio, mes)
         
         content_data = {
             "anio": anio,
@@ -257,59 +277,75 @@ class GeneradorSeccion2:
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
+        preloaded = data.get("preloaded", False)
         
         # Ruta del Excel definida dentro del método (no se solicita en el JSON)
         ruta_excel = "https://verytelcsp.sharepoint.com/sites/OPERACIONES/Shared%20Documents/PROYECTOS/A%C3%B1o%202024/2024-1809%20MANTTO%20BOGOTA%20ETB/8.%20INFORMES/INFORME%20MENSUAL/13.%2001NOV%20-%2030NOV/01%20OBLIGACIONES%20GENERALES/OBLIGACI%C3%93N%202,5,6,9,13/ANEXO%20MESA%20DE%20SERVICIO/ESCALAMIENTOS/ESCALAMIENTOS.xlsx"
         
-        # Obtener datos desde SharePoint para calcular los totales
-        table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
-        
-        if ruta_excel:
-            try:
-                from src.services.sharepoint_service import get_sharepoint_service
-                import config
-                sharepoint_service = await get_sharepoint_service()
-                
-                # Convertir URL completa a ruta relativa del servidor si es necesario
-                if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
-                    ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
-                    ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
-                else:
-                    # Es una ruta relativa simple, usar ruta_base para construir la ruta completa
-                    ruta_sharepoint = ruta_excel
-                    ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
-                
-                # Leer Excel completo con las 3 hojas
-                resultado = await sharepoint_service.leer_excel_escalamientos_completo(
-                    ruta_textual=ruta_sharepoint,
-                    ruta_base=ruta_base
-                )
-                
-                if resultado.get("success"):
-                    # Obtener los datos de cada hoja
-                    datos_enel = resultado.get("datos", {}).get("enel", [])
-                    datos_caida_masiva = resultado.get("datos", {}).get("caida_masiva", [])
-                    datos_conectividad = resultado.get("datos", {}).get("conectividad", [])
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            table_1 = content.get("table_1", [])
+            logger.info(f"Sección 2.5 ya precargada, usando datos existentes")
+        else:
+            # Obtener datos desde SharePoint para calcular los totales
+            table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
+            
+            if ruta_excel:
+                try:
+                    from src.services.sharepoint_service import get_sharepoint_service
+                    import config
+                    sharepoint_service = await get_sharepoint_service()
                     
-                    # Calcular las cantidades (excluyendo filas vacías o con valores vacíos)
-                    cantidad_enel = len([r for r in datos_enel if r and any(str(v).strip() for k, v in r.items() if k != 'tipo')])
-                    cantidad_caida_masiva = len([r for r in datos_caida_masiva if r and any(str(v).strip() for k, v in r.items() if k != 'tipo')])
-                    cantidad_conectividad = len([r for r in datos_conectividad if r and any(str(v).strip() for k, v in r.items() if k != 'tipo')])
+                    # Convertir URL completa a ruta relativa del servidor si es necesario
+                    if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
+                        ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
+                        ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
+                    else:
+                        # Es una ruta relativa simple, usar ruta_base para construir la ruta completa
+                        ruta_sharepoint = ruta_excel
+                        ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
                     
-                    # Calcular el total
-                    total = cantidad_enel + cantidad_caida_masiva + cantidad_conectividad
+                    # Leer Excel completo con las 3 hojas
+                    resultado = await sharepoint_service.leer_excel_escalamientos_completo(
+                        ruta_textual=ruta_sharepoint,
+                        ruta_base=ruta_base
+                    )
                     
-                    # Construir la tabla de resumen
-                    table_1 = [
-                        {"escalamiento": "ENEL", "cantidad": str(cantidad_enel)},
-                        {"escalamiento": "CAÍDA MASIVA", "cantidad": str(cantidad_caida_masiva)},
-                        {"escalamiento": "CONECTIVIDAD", "cantidad": str(cantidad_conectividad)},
-                        {"escalamiento": "TOTAL", "cantidad": str(total)}
-                    ]
-                    
-                    logger.info(f"Datos de escalamientos calculados desde SharePoint: ENEL={cantidad_enel}, CAÍDA MASIVA={cantidad_caida_masiva}, CONECTIVIDAD={cantidad_conectividad}, TOTAL={total}")
-                else:
-                    logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+                    if resultado.get("success"):
+                        # Obtener los datos de cada hoja
+                        datos_enel = resultado.get("datos", {}).get("enel", [])
+                        datos_caida_masiva = resultado.get("datos", {}).get("caida_masiva", [])
+                        datos_conectividad = resultado.get("datos", {}).get("conectividad", [])
+                        
+                        # Calcular las cantidades (excluyendo filas vacías o con valores vacíos)
+                        cantidad_enel = len([r for r in datos_enel if r and any(str(v).strip() for k, v in r.items() if k != 'tipo')])
+                        cantidad_caida_masiva = len([r for r in datos_caida_masiva if r and any(str(v).strip() for k, v in r.items() if k != 'tipo')])
+                        cantidad_conectividad = len([r for r in datos_conectividad if r and any(str(v).strip() for k, v in r.items() if k != 'tipo')])
+                        
+                        # Calcular el total
+                        total = cantidad_enel + cantidad_caida_masiva + cantidad_conectividad
+                        
+                        # Construir la tabla de resumen
+                        table_1 = [
+                            {"escalamiento": "ENEL", "cantidad": str(cantidad_enel)},
+                            {"escalamiento": "CAÍDA MASIVA", "cantidad": str(cantidad_caida_masiva)},
+                            {"escalamiento": "CONECTIVIDAD", "cantidad": str(cantidad_conectividad)},
+                            {"escalamiento": "TOTAL", "cantidad": str(total)}
+                        ]
+                        
+                        logger.info(f"Datos de escalamientos calculados desde SharePoint: ENEL={cantidad_enel}, CAÍDA MASIVA={cantidad_caida_masiva}, CONECTIVIDAD={cantidad_conectividad}, TOTAL={total}")
+                    else:
+                        logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+                        if not table_1:
+                            # Si no hay datos de fallback, crear estructura vacía
+                            table_1 = [
+                                {"escalamiento": "ENEL", "cantidad": "0"},
+                                {"escalamiento": "CAÍDA MASIVA", "cantidad": "0"},
+                                {"escalamiento": "CONECTIVIDAD", "cantidad": "0"},
+                                {"escalamiento": "TOTAL", "cantidad": "0"}
+                            ]
+                except Exception as e:
+                    logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5: {e}. Usando datos de content como fallback.")
                     if not table_1:
                         # Si no hay datos de fallback, crear estructura vacía
                         table_1 = [
@@ -318,18 +354,6 @@ class GeneradorSeccion2:
                             {"escalamiento": "CONECTIVIDAD", "cantidad": "0"},
                             {"escalamiento": "TOTAL", "cantidad": "0"}
                         ]
-            except Exception as e:
-                logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5: {e}. Usando datos de content como fallback.")
-                if not table_1:
-                    # Si no hay datos de fallback, crear estructura vacía
-                    table_1 = [
-                        {"escalamiento": "ENEL", "cantidad": "0"},
-                        {"escalamiento": "CAÍDA MASIVA", "cantidad": "0"},
-                        {"escalamiento": "CONECTIVIDAD", "cantidad": "0"},
-                        {"escalamiento": "TOTAL", "cantidad": "0"}
-                    ]
-        else:
-            # Si no hay ruta_excel, usar datos de content o crear estructura vacía
             if not table_1:
                 table_1 = [
                     {"escalamiento": "ENEL", "cantidad": "0"},
@@ -357,55 +381,61 @@ class GeneradorSeccion2:
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
+        preloaded = data.get("preloaded", False)
         
         # Ruta del Excel definida dentro del método (no se solicita en el JSON)
         ruta_excel = "https://verytelcsp.sharepoint.com/sites/OPERACIONES/Shared%20Documents/PROYECTOS/A%C3%B1o%202024/2024-1809%20MANTTO%20BOGOTA%20ETB/8.%20INFORMES/INFORME%20MENSUAL/13.%2001NOV%20-%2030NOV/01%20OBLIGACIONES%20GENERALES/OBLIGACI%C3%93N%202,5,6,9,13/ANEXO%20MESA%20DE%20SERVICIO/ESCALAMIENTOS/ESCALAMIENTOS.xlsx"
         
-        # Siempre obtener datos desde SharePoint (hoja 3 - ENEL)
-        # Siguiendo el patrón de seccion_1_info_general.py
-        table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
-        
-        if ruta_excel:
-            try:
-                from src.services.sharepoint_service import get_sharepoint_service
-                sharepoint_service = await get_sharepoint_service()
-                
-                # Convertir URL completa a ruta relativa del servidor si es necesario
-                # Siguiendo el patrón de seccion_1_info_general.py
-                if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
-                    ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
-                    ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
-                else:
-                    # Es una ruta relativa simple, usar ruta_base para construir la ruta completa
-                    ruta_sharepoint = ruta_excel
-                    ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
-                
-                # Leer Excel completo con las 3 hojas
-                resultado = await sharepoint_service.leer_excel_escalamientos_completo(
-                    ruta_textual=ruta_sharepoint,
-                    ruta_base=ruta_base
-                )
-                
-                if resultado.get("success"):
-                    # Usar los datos de ENEL (hoja 3)
-                    table_1 = resultado.get("datos", {}).get("enel", [])
-                    # Formatear fechas en la tabla (campo: fecha_escalamiento)
-                    table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
-                    logger.info(f"Datos de ENEL obtenidos desde SharePoint: {len(table_1)} registros")
-                else:
-                    logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            table_1 = content.get("table_1", [])
+            logger.info(f"Sección 2.5.1 ya precargada, usando datos existentes")
+        else:
+            # Obtener datos desde SharePoint (hoja 3 - ENEL)
+            # Siguiendo el patrón de seccion_1_info_general.py
+            table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
+            
+            if ruta_excel:
+                try:
+                    from src.services.sharepoint_service import get_sharepoint_service
+                    sharepoint_service = await get_sharepoint_service()
+                    
+                    # Convertir URL completa a ruta relativa del servidor si es necesario
+                    # Siguiendo el patrón de seccion_1_info_general.py
+                    if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
+                        ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
+                        ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
+                    else:
+                        # Es una ruta relativa simple, usar ruta_base para construir la ruta completa
+                        ruta_sharepoint = ruta_excel
+                        ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
+                    
+                    # Leer Excel completo con las 3 hojas
+                    resultado = await sharepoint_service.leer_excel_escalamientos_completo(
+                        ruta_textual=ruta_sharepoint,
+                        ruta_base=ruta_base
+                    )
+                    
+                    if resultado.get("success"):
+                        # Usar los datos de ENEL (hoja 3)
+                        table_1 = resultado.get("datos", {}).get("enel", [])
+                        # Formatear fechas en la tabla (campo: fecha_escalamiento)
+                        table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
+                        logger.info(f"Datos de ENEL obtenidos desde SharePoint: {len(table_1)} registros")
+                    else:
+                        logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+                        if not table_1:
+                            table_1 = []
+                        else:
+                            # Formatear fechas también en el fallback
+                            table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
+                except Exception as e:
+                    logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5.1: {e}. Usando datos de content como fallback.")
                     if not table_1:
                         table_1 = []
                     else:
                         # Formatear fechas también en el fallback
                         table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
-            except Exception as e:
-                logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5.1: {e}. Usando datos de content como fallback.")
-                if not table_1:
-                    table_1 = []
-                else:
-                    # Formatear fechas también en el fallback
-                    table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
         
         content_data = {
             "anio": anio,
@@ -426,55 +456,61 @@ class GeneradorSeccion2:
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
+        preloaded = data.get("preloaded", False)
         
         # Ruta del Excel definida dentro del método (no se solicita en el JSON)
         ruta_excel = "https://verytelcsp.sharepoint.com/sites/OPERACIONES/Shared%20Documents/PROYECTOS/A%C3%B1o%202024/2024-1809%20MANTTO%20BOGOTA%20ETB/8.%20INFORMES/INFORME%20MENSUAL/13.%2001NOV%20-%2030NOV/01%20OBLIGACIONES%20GENERALES/OBLIGACI%C3%93N%202,5,6,9,13/ANEXO%20MESA%20DE%20SERVICIO/ESCALAMIENTOS/ESCALAMIENTOS.xlsx"
         
-        # Siempre obtener datos desde SharePoint (hoja 1 - CAÍDA MASIVA)
-        # Siguiendo el patrón de seccion_1_info_general.py
-        table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
-        
-        if ruta_excel:
-            try:
-                from src.services.sharepoint_service import get_sharepoint_service
-                sharepoint_service = await get_sharepoint_service()
-                
-                # Convertir URL completa a ruta relativa del servidor si es necesario
-                # Siguiendo el patrón de seccion_1_info_general.py
-                if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
-                    ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
-                    ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
-                else:
-                    # Si es una ruta relativa simple, usar ruta_base para construir la ruta completa
-                    ruta_sharepoint = ruta_excel
-                    ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
-                
-                # Leer Excel completo con las 3 hojas
-                resultado = await sharepoint_service.leer_excel_escalamientos_completo(
-                    ruta_textual=ruta_sharepoint,
-                    ruta_base=ruta_base
-                )
-                
-                if resultado.get("success"):
-                    # Usar los datos de CAÍDA MASIVA (hoja 1)
-                    table_1 = resultado.get("datos", {}).get("caida_masiva", [])
-                    # Formatear fechas en la tabla (campo: fecha)
-                    table_1 = formatear_fechas_en_tabla(table_1, ["fecha", "fecha_escalamiento"])
-                    logger.info(f"Datos de CAÍDA MASIVA obtenidos desde SharePoint: {len(table_1)} registros")
-                else:
-                    logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            table_1 = content.get("table_1", [])
+            logger.info(f"Sección 2.5.2 ya precargada, usando datos existentes")
+        else:
+            # Obtener datos desde SharePoint (hoja 1 - CAÍDA MASIVA)
+            # Siguiendo el patrón de seccion_1_info_general.py
+            table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
+            
+            if ruta_excel:
+                try:
+                    from src.services.sharepoint_service import get_sharepoint_service
+                    sharepoint_service = await get_sharepoint_service()
+                    
+                    # Convertir URL completa a ruta relativa del servidor si es necesario
+                    # Siguiendo el patrón de seccion_1_info_general.py
+                    if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
+                        ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
+                        ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
+                    else:
+                        # Si es una ruta relativa simple, usar ruta_base para construir la ruta completa
+                        ruta_sharepoint = ruta_excel
+                        ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
+                    
+                    # Leer Excel completo con las 3 hojas
+                    resultado = await sharepoint_service.leer_excel_escalamientos_completo(
+                        ruta_textual=ruta_sharepoint,
+                        ruta_base=ruta_base
+                    )
+                    
+                    if resultado.get("success"):
+                        # Usar los datos de CAÍDA MASIVA (hoja 1)
+                        table_1 = resultado.get("datos", {}).get("caida_masiva", [])
+                        # Formatear fechas en la tabla (campo: fecha)
+                        table_1 = formatear_fechas_en_tabla(table_1, ["fecha", "fecha_escalamiento"])
+                        logger.info(f"Datos de CAÍDA MASIVA obtenidos desde SharePoint: {len(table_1)} registros")
+                    else:
+                        logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+                        if not table_1:
+                            table_1 = []
+                        else:
+                            # Formatear fechas también en el fallback
+                            table_1 = formatear_fechas_en_tabla(table_1, ["fecha", "fecha_escalamiento"])
+                except Exception as e:
+                    logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5.2: {e}. Usando datos de content como fallback.")
                     if not table_1:
                         table_1 = []
                     else:
                         # Formatear fechas también en el fallback
                         table_1 = formatear_fechas_en_tabla(table_1, ["fecha", "fecha_escalamiento"])
-            except Exception as e:
-                logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5.2: {e}. Usando datos de content como fallback.")
-                if not table_1:
-                    table_1 = []
-                else:
-                    # Formatear fechas también en el fallback
-                    table_1 = formatear_fechas_en_tabla(table_1, ["fecha", "fecha_escalamiento"])
         
         content_data = {
             "anio": anio,
@@ -495,55 +531,61 @@ class GeneradorSeccion2:
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
+        preloaded = data.get("preloaded", False)
         
         # Ruta del Excel definida dentro del método (no se solicita en el JSON)
         ruta_excel = "https://verytelcsp.sharepoint.com/sites/OPERACIONES/Shared%20Documents/PROYECTOS/A%C3%B1o%202024/2024-1809%20MANTTO%20BOGOTA%20ETB/8.%20INFORMES/INFORME%20MENSUAL/13.%2001NOV%20-%2030NOV/01%20OBLIGACIONES%20GENERALES/OBLIGACI%C3%93N%202,5,6,9,13/ANEXO%20MESA%20DE%20SERVICIO/ESCALAMIENTOS/ESCALAMIENTOS.xlsx"
         
-        # Siempre obtener datos desde SharePoint (hoja 2 - CONECTIVIDAD)
-        # Siguiendo el patrón de seccion_1_info_general.py
-        table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
-        
-        if ruta_excel:
-            try:
-                from src.services.sharepoint_service import get_sharepoint_service
-                sharepoint_service = await get_sharepoint_service()
-                
-                # Convertir URL completa a ruta relativa del servidor si es necesario
-                # Siguiendo el patrón de seccion_1_info_general.py
-                if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
-                    ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
-                    ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
-                else:
-                    # Si es una ruta relativa simple, usar ruta_base para construir la ruta completa
-                    ruta_sharepoint = ruta_excel
-                    ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
-                
-                # Leer Excel completo con las 3 hojas
-                resultado = await sharepoint_service.leer_excel_escalamientos_completo(
-                    ruta_textual=ruta_sharepoint,
-                    ruta_base=ruta_base
-                )
-                
-                if resultado.get("success"):
-                    # Usar los datos de CONECTIVIDAD (hoja 2)
-                    table_1 = resultado.get("datos", {}).get("conectividad", [])
-                    # Formatear fechas en la tabla (campo: fecha_escalamiento)
-                    table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
-                    logger.info(f"Datos de CONECTIVIDAD obtenidos desde SharePoint: {len(table_1)} registros")
-                else:
-                    logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            table_1 = content.get("table_1", [])
+            logger.info(f"Sección 2.5.3 ya precargada, usando datos existentes")
+        else:
+            # Obtener datos desde SharePoint (hoja 2 - CONECTIVIDAD)
+            # Siguiendo el patrón de seccion_1_info_general.py
+            table_1 = content.get("table_1", [])  # Fallback si falla SharePoint
+            
+            if ruta_excel:
+                try:
+                    from src.services.sharepoint_service import get_sharepoint_service
+                    sharepoint_service = await get_sharepoint_service()
+                    
+                    # Convertir URL completa a ruta relativa del servidor si es necesario
+                    # Siguiendo el patrón de seccion_1_info_general.py
+                    if ruta_excel.startswith("http://") or ruta_excel.startswith("https://"):
+                        ruta_sharepoint = convertir_url_sharepoint_a_ruta_relativa(ruta_excel)
+                        ruta_base = None  # No usar ruta_base cuando ya es ruta relativa del servidor
+                    else:
+                        # Si es una ruta relativa simple, usar ruta_base para construir la ruta completa
+                        ruta_sharepoint = ruta_excel
+                        ruta_base = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH")
+                    
+                    # Leer Excel completo con las 3 hojas
+                    resultado = await sharepoint_service.leer_excel_escalamientos_completo(
+                        ruta_textual=ruta_sharepoint,
+                        ruta_base=ruta_base
+                    )
+                    
+                    if resultado.get("success"):
+                        # Usar los datos de CONECTIVIDAD (hoja 2)
+                        table_1 = resultado.get("datos", {}).get("conectividad", [])
+                        # Formatear fechas en la tabla (campo: fecha_escalamiento)
+                        table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
+                        logger.info(f"Datos de CONECTIVIDAD obtenidos desde SharePoint: {len(table_1)} registros")
+                    else:
+                        logger.warning(f"Error al obtener datos desde SharePoint: {resultado.get('message')}. Usando datos de content como fallback.")
+                        if not table_1:
+                            table_1 = []
+                        else:
+                            # Formatear fechas también en el fallback
+                            table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
+                except Exception as e:
+                    logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5.3: {e}. Usando datos de content como fallback.")
                     if not table_1:
                         table_1 = []
                     else:
                         # Formatear fechas también en el fallback
                         table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
-            except Exception as e:
-                logger.warning(f"Error al obtener table_1 desde SharePoint para sección 2.5.3: {e}. Usando datos de content como fallback.")
-                if not table_1:
-                    table_1 = []
-                else:
-                    # Formatear fechas también en el fallback
-                    table_1 = formatear_fechas_en_tabla(table_1, ["fecha_escalamiento", "fecha"])
         
         content_data = {
             "anio": anio,
@@ -564,101 +606,107 @@ class GeneradorSeccion2:
         content = data.get("content", {})
         anio = data.get("anio")
         mes = data.get("mes")
+        preloaded = data.get("preloaded", False)
         
         # Ruta de la carpeta en SharePoint donde buscar el Excel
         ruta_carpeta_sharepoint = "https://verytelcsp.sharepoint.com/sites/OPERACIONES/Shared%20Documents/PROYECTOS/A%C3%B1o%202024/2024-1809%20MANTTO%20BOGOTA%20ETB/8.%20INFORMES/INFORME%20MENSUAL/13.%2001NOV%20-%2030NOV/01%20OBLIGACIONES%20GENERALES/OBLIGACI%C3%93N%202,5,6,9,13/ANEXO%20MESA%20DE%20SERVICIO/ESTADO%20DEL%20SISTEMA"
         
-        # Valor por defecto
-        name_document = content.get("name_document", "NO EXISTE")
-        
-        # Buscar archivo Excel en la carpeta de SharePoint
-        try:
-            from src.services.sharepoint_service import get_sharepoint_service
-            sharepoint_service = await get_sharepoint_service()
+        # Si ya está precargado, usar los datos existentes
+        if preloaded:
+            name_document = content.get("name_document", "NO EXISTE")
+            logger.info(f"Sección 2.6 ya precargada, usando datos existentes")
+        else:
+            # Valor por defecto
+            name_document = content.get("name_document", "NO EXISTE")
             
-            # Convertir URL completa a ruta relativa al drive root
-            # Necesitamos extraer solo la parte que viene después del base_path
-            if ruta_carpeta_sharepoint.startswith("http://") or ruta_carpeta_sharepoint.startswith("https://"):
-                from urllib.parse import unquote, urlparse
-                import config
-                url_parsed = urlparse(ruta_carpeta_sharepoint)
-                path_decodificado = unquote(url_parsed.path)
-                path_parts = [p for p in path_decodificado.split('/') if p]
+            # Buscar archivo Excel en la carpeta de SharePoint
+            try:
+                from src.services.sharepoint_service import get_sharepoint_service
+                sharepoint_service = await get_sharepoint_service()
                 
-                # Buscar "Shared Documents" en la ruta
-                try:
-                    idx_shared_docs = next(i for i, part in enumerate(path_parts) if part == "Shared Documents")
-                    # Tomar todo después de "Shared Documents"
-                    ruta_completa_desde_shared = '/'.join(path_parts[idx_shared_docs + 1:])
+                # Convertir URL completa a ruta relativa al drive root
+                # Necesitamos extraer solo la parte que viene después del base_path
+                if ruta_carpeta_sharepoint.startswith("http://") or ruta_carpeta_sharepoint.startswith("https://"):
+                    from urllib.parse import unquote, urlparse
+                    import config
+                    url_parsed = urlparse(ruta_carpeta_sharepoint)
+                    path_decodificado = unquote(url_parsed.path)
+                    path_parts = [p for p in path_decodificado.split('/') if p]
                     
-                    # Obtener el base_path configurado (sin "Shared Documents")
-                    base_path_config = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH", "")
-                    if base_path_config:
-                        # Normalizar base_path: remover "Shared Documents" si está al inicio
-                        base_normalizado = base_path_config.rstrip('/').rstrip(' ')
-                        if base_normalizado.startswith('Shared Documents/'):
-                            base_normalizado = base_normalizado[len('Shared Documents/'):]
-                        elif base_normalizado.startswith('Shared Documents'):
-                            base_normalizado = base_normalizado[len('Shared Documents'):].lstrip('/')
-                        
-                        # Si la ruta completa empieza con el base_path, removerlo
-                        if ruta_completa_desde_shared.startswith(base_normalizado):
-                            ruta_carpeta = ruta_completa_desde_shared[len(base_normalizado):].lstrip('/')
-                            logger.info(f"Base path removido. Ruta resultante: {ruta_carpeta}")
-                        else:
-                            # Si no coincide, usar la ruta completa después de Shared Documents
-                            ruta_carpeta = ruta_completa_desde_shared
-                            logger.info(f"Base path no coincide. Usando ruta completa: {ruta_carpeta}")
-                    else:
-                        # Si no hay base_path, usar toda la ruta después de Shared Documents
-                        ruta_carpeta = ruta_completa_desde_shared
-                        logger.info(f"No hay base_path configurado. Usando ruta completa: {ruta_carpeta}")
-                        
-                except StopIteration:
-                    # Si no encuentra "Shared Documents", usar la ruta completa después de "sites"
+                    # Buscar "Shared Documents" en la ruta
                     try:
-                        idx_sites = next(i for i, part in enumerate(path_parts) if part in ['sites', 'teams', 'personal'])
-                        ruta_carpeta = '/'.join(path_parts[idx_sites + 2:])  # Saltar sites y nombre del sitio
+                        idx_shared_docs = next(i for i, part in enumerate(path_parts) if part == "Shared Documents")
+                        # Tomar todo después de "Shared Documents"
+                        ruta_completa_desde_shared = '/'.join(path_parts[idx_shared_docs + 1:])
+                        
+                        # Obtener el base_path configurado (sin "Shared Documents")
+                        base_path_config = getattr(config, 'SHAREPOINT_BASE_PATH', None) or os.getenv("SHAREPOINT_BASE_PATH", "")
+                        if base_path_config:
+                            # Normalizar base_path: remover "Shared Documents" si está al inicio
+                            base_normalizado = base_path_config.rstrip('/').rstrip(' ')
+                            if base_normalizado.startswith('Shared Documents/'):
+                                base_normalizado = base_normalizado[len('Shared Documents/'):]
+                            elif base_normalizado.startswith('Shared Documents'):
+                                base_normalizado = base_normalizado[len('Shared Documents'):].lstrip('/')
+                            
+                            # Si la ruta completa empieza con el base_path, removerlo
+                            if ruta_completa_desde_shared.startswith(base_normalizado):
+                                ruta_carpeta = ruta_completa_desde_shared[len(base_normalizado):].lstrip('/')
+                                logger.info(f"Base path removido. Ruta resultante: {ruta_carpeta}")
+                            else:
+                                # Si no coincide, usar la ruta completa después de Shared Documents
+                                ruta_carpeta = ruta_completa_desde_shared
+                                logger.info(f"Base path no coincide. Usando ruta completa: {ruta_carpeta}")
+                        else:
+                            # Si no hay base_path, usar toda la ruta después de Shared Documents
+                            ruta_carpeta = ruta_completa_desde_shared
+                            logger.info(f"No hay base_path configurado. Usando ruta completa: {ruta_carpeta}")
+                            
                     except StopIteration:
-                        ruta_carpeta = '/'.join(path_parts)
-            else:
-                ruta_carpeta = ruta_carpeta_sharepoint
-            
-            logger.info(f"Ruta carpeta para listar archivos: {ruta_carpeta}")
-            
-            # Listar archivos en la carpeta
-            archivos = sharepoint_service.extractor.listar_archivos_en_carpeta(ruta_carpeta)
-            
-            logger.info(f"Archivos encontrados en la carpeta: {len(archivos) if archivos else 0}")
-            if archivos:
-                logger.info(f"Nombres de archivos encontrados: {[a.get('nombre', 'N/A') for a in archivos[:5]]}")
-            
-            if archivos:
-                # Buscar archivos Excel (.xlsx, .xls)
-                archivos_excel = [
-                    archivo for archivo in archivos
-                    if archivo.get("nombre", "").lower().endswith((".xlsx", ".xls"))
-                ]
+                        # Si no encuentra "Shared Documents", usar la ruta completa después de "sites"
+                        try:
+                            idx_sites = next(i for i, part in enumerate(path_parts) if part in ['sites', 'teams', 'personal'])
+                            ruta_carpeta = '/'.join(path_parts[idx_sites + 2:])  # Saltar sites y nombre del sitio
+                        except StopIteration:
+                            ruta_carpeta = '/'.join(path_parts)
+                else:
+                    ruta_carpeta = ruta_carpeta_sharepoint
                 
-                if archivos_excel:
-                    # Tomar el primer archivo Excel encontrado
-                    nombre_archivo = archivos_excel[0].get("nombre", "")
-                    if nombre_archivo:
-                        name_document = nombre_archivo
-                        logger.info(f"Archivo Excel encontrado en SharePoint: {name_document}")
+                logger.info(f"Ruta carpeta para listar archivos: {ruta_carpeta}")
+                
+                # Listar archivos en la carpeta
+                archivos = sharepoint_service.extractor.listar_archivos_en_carpeta(ruta_carpeta)
+                
+                logger.info(f"Archivos encontrados en la carpeta: {len(archivos) if archivos else 0}")
+                if archivos:
+                    logger.info(f"Nombres de archivos encontrados: {[a.get('nombre', 'N/A') for a in archivos[:5]]}")
+                
+                if archivos:
+                    # Buscar archivos Excel (.xlsx, .xls)
+                    archivos_excel = [
+                        archivo for archivo in archivos
+                        if archivo.get("nombre", "").lower().endswith((".xlsx", ".xls"))
+                    ]
+                    
+                    if archivos_excel:
+                        # Tomar el primer archivo Excel encontrado
+                        nombre_archivo = archivos_excel[0].get("nombre", "")
+                        if nombre_archivo:
+                            name_document = nombre_archivo
+                            logger.info(f"Archivo Excel encontrado en SharePoint: {name_document}")
+                        else:
+                            name_document = "NO EXISTE"
+                            logger.warning("No se encontró nombre de archivo Excel en la respuesta de SharePoint")
                     else:
                         name_document = "NO EXISTE"
-                        logger.warning("No se encontró nombre de archivo Excel en la respuesta de SharePoint")
+                        logger.warning(f"No se encontraron archivos Excel en la carpeta: {ruta_carpeta}")
                 else:
                     name_document = "NO EXISTE"
-                    logger.warning(f"No se encontraron archivos Excel en la carpeta: {ruta_carpeta}")
-            else:
-                name_document = "NO EXISTE"
-                logger.warning(f"No se encontraron archivos en la carpeta: {ruta_carpeta}")
-                
-        except Exception as e:
-            logger.warning(f"Error al buscar archivo Excel en SharePoint para sección 2.6: {e}. Usando valor por defecto.")
-            name_document = content.get("name_document", "NO EXISTE")
+                    logger.warning(f"No se encontraron archivos en la carpeta: {ruta_carpeta}")
+                    
+            except Exception as e:
+                logger.warning(f"Error al buscar archivo Excel en SharePoint para sección 2.6: {e}. Usando valor por defecto.")
+                name_document = content.get("name_document", "NO EXISTE")
         
         content_data = {
             "anio": anio,
@@ -673,6 +721,201 @@ class GeneradorSeccion2:
         }
         
         return content_data
+    
+    async def preload_seccion_2(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Precarga todas las secciones del módulo 2 llamando a los métodos correspondientes.
+        Retorna un diccionario con los datos procesados de cada sección.
+        
+        Args:
+            data: Diccionario con los datos del documento (anio, mes, user_id, name_file, etc.)
+            
+        Returns:
+            Diccionario con los datos procesados de cada sección:
+            {
+                "2.1": {...datos procesados...},
+                "2.2": {...datos procesados...},
+                ...
+            }
+        """
+        resultados = {}
+        
+        # Preparar datos base para cada sección
+        base_data = {
+            "anio": data.get("anio"),
+            "mes": data.get("mes"),
+            "user_id": data.get("user_id", 1),
+            "name_file": data.get("name_file", f"INFORME_MENSUAL_{data.get('mes')}_{data.get('anio')}_V1.docx")
+        }
+        
+        # Obtener el documento completo para pasar los datos de cada sección
+        document = data.get("document", {})
+        index = document.get("index", [])
+        
+        # Precargar todas las secciones y capturar los datos procesados
+        try:
+            # Sección 2 (principal)
+            section_2_data = base_data.copy()
+            section_2_item = next((item for item in index if item.get("id") == "2"), {})
+            section_2_data.update({
+                "section_id": "2",
+                "level": section_2_item.get("level", 1),
+                "title": section_2_item.get("title", "2. INFORME DE MESA DE SERVICIO"),
+                "content": section_2_item.get("content", {})
+            })
+            resultados["2"] = self._seccion_2(section_2_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.1
+            section_2_1_data = base_data.copy()
+            section_2_1_item = next((item for item in index if item.get("id") == "2.1"), {})
+            section_2_1_data.update({
+                "section_id": "2.1",
+                "level": section_2_1_item.get("level", 2),
+                "title": section_2_1_item.get("title", "2.1 INFORME DE MESA DE SERVICIO"),
+                "content": section_2_1_item.get("content", {}),
+                "preloaded": section_2_1_item.get("preloaded", False)
+            })
+            resultados["2.1"] = await self._seccion_2_1_mesa_servicio(section_2_1_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.1: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.2
+            section_2_2_data = base_data.copy()
+            section_2_2_item = next((item for item in index if item.get("id") == "2.2"), {})
+            section_2_2_data.update({
+                "section_id": "2.2",
+                "level": section_2_2_item.get("level", 2),
+                "title": section_2_2_item.get("title", "HERRAMIENTAS DE TRABAJO"),
+                "content": section_2_2_item.get("content", {})
+            })
+            resultados["2.2"] = self._seccion_2_2_herramientas(section_2_2_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.2: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.3
+            section_2_3_data = base_data.copy()
+            section_2_3_item = next((item for item in index if item.get("id") == "2.3"), {})
+            section_2_3_data.update({
+                "section_id": "2.3",
+                "level": section_2_3_item.get("level", 2),
+                "title": section_2_3_item.get("title", "VISITAS DE DIAGNÓSTICOS A SUBSISTEMAS"),
+                "content": section_2_3_item.get("content", {}),
+                "preloaded": section_2_3_item.get("preloaded", False)
+            })
+            resultados["2.3"] = await self._seccion_2_3_visitas_diagnostico(section_2_3_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.3: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.4
+            section_2_4_data = base_data.copy()
+            section_2_4_item = next((item for item in index if item.get("id") == "2.4"), {})
+            section_2_4_data.update({
+                "section_id": "2.4",
+                "level": section_2_4_item.get("level", 2),
+                "title": section_2_4_item.get("title", "INFORME CONSOLIDADO DEL ESTADO DE LOS TICKETS ADMINISTRATIVOS"),
+                "content": section_2_4_item.get("content", {}),
+                "preloaded": section_2_4_item.get("preloaded", False)
+            })
+            resultados["2.4"] = await self._seccion_2_4_tickets(section_2_4_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.4: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.5
+            section_2_5_data = base_data.copy()
+            section_2_5_item = next((item for item in index if item.get("id") == "2.5"), {})
+            section_2_5_data.update({
+                "section_id": "2.5",
+                "level": section_2_5_item.get("level", 2),
+                "title": section_2_5_item.get("title", "ESCALAMIENTOS"),
+                "content": section_2_5_item.get("content", {}),
+                "preloaded": section_2_5_item.get("preloaded", False)
+            })
+            resultados["2.5"] = await self._seccion_2_5_escalamientos(section_2_5_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.5: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.5.1
+            section_2_5_1_data = base_data.copy()
+            section_2_5_1_item = next((item for item in index if item.get("id") == "2.5.1"), {})
+            section_2_5_1_data.update({
+                "section_id": "2.5.1",
+                "level": section_2_5_1_item.get("level", 3),
+                "title": section_2_5_1_item.get("title", "ENEL"),
+                "content": section_2_5_1_item.get("content", {}),
+                "preloaded": section_2_5_1_item.get("preloaded", False)
+            })
+            resultados["2.5.1"] = await self._seccion_2_5_1_enel(section_2_5_1_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.5.1: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.5.2
+            section_2_5_2_data = base_data.copy()
+            section_2_5_2_item = next((item for item in index if item.get("id") == "2.5.2"), {})
+            section_2_5_2_data.update({
+                "section_id": "2.5.2",
+                "level": section_2_5_2_item.get("level", 3),
+                "title": section_2_5_2_item.get("title", "CAÍDA MASIVA"),
+                "content": section_2_5_2_item.get("content", {}),
+                "preloaded": section_2_5_2_item.get("preloaded", False)
+            })
+            resultados["2.5.2"] = await self._seccion_2_5_2_caida_masiva(section_2_5_2_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.5.2: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.5.3
+            section_2_5_3_data = base_data.copy()
+            section_2_5_3_item = next((item for item in index if item.get("id") == "2.5.3"), {})
+            section_2_5_3_data.update({
+                "section_id": "2.5.3",
+                "level": section_2_5_3_item.get("level", 3),
+                "title": section_2_5_3_item.get("title", "CONECTIVIDAD"),
+                "content": section_2_5_3_item.get("content", {}),
+                "preloaded": section_2_5_3_item.get("preloaded", False)
+            })
+            resultados["2.5.3"] = await self._seccion_2_5_3_conectividad(section_2_5_3_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.5.3: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.6
+            section_2_6_data = base_data.copy()
+            section_2_6_item = next((item for item in index if item.get("id") == "2.6"), {})
+            section_2_6_data.update({
+                "section_id": "2.6",
+                "level": section_2_6_item.get("level", 2),
+                "title": section_2_6_item.get("title", "INFORME ACTUALIZADO DE HOJAS DE VIDA DE LOS PUNTOS Y SUBSISTEMAS DE VIDEO VIGILANCIA"),
+                "content": section_2_6_item.get("content", {}),
+                "preloaded": section_2_6_item.get("preloaded", False)
+            })
+            resultados["2.6"] = await self._seccion_2_6_hojas_vida(section_2_6_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.6: {e}", exc_info=True)
+        
+        try:
+            # Sección 2.7
+            section_2_7_data = base_data.copy()
+            section_2_7_item = next((item for item in index if item.get("id") == "2.7"), {})
+            section_2_7_data.update({
+                "section_id": "2.7",
+                "level": section_2_7_item.get("level", 2),
+                "title": section_2_7_item.get("title", "INFORME EJECUTIVO DEL ESTADO DEL SISTEMA"),
+                "content": section_2_7_item.get("content", {})
+            })
+            resultados["2.7"] = self._seccion_2_7_estado_sistema(section_2_7_data)
+        except Exception as e:
+            logger.error(f"Error al precargar sección 2.7: {e}", exc_info=True)
+        
+        return resultados
     
     def _seccion_2_7_estado_sistema(self, data: Dict[str, Any]):
         content = data.get("content", {})
@@ -958,8 +1201,7 @@ class GeneradorSeccion2:
             },
         }
         
-        return content_data
-    
+        return content_data    
     
     def _groupby_consecutivo_caida(self, table_data: List[Dict[str, Any]], campo: str = "consecutivo_caida") -> Dict[str, int]:
         """
@@ -1065,7 +1307,9 @@ class GeneradorSeccion2:
         # Sección 2 (index[0]) - INFORME DE MESA DE SERVICIO
         if len(index) > 0:
             content_2 = index[0].get("content", {})
-            contexto["image_2"] = procesar_imagen(template, content_2.get("image", "")) or ""
+            imagen_2 = procesar_imagen(template, content_2.get("image", ""))
+            if imagen_2:
+                contexto["image_2"] = imagen_2
         
         # Sección 2.1 (index[1]) - INFORME DE MESA DE SERVICIO
         if len(index) > 1:
@@ -1073,7 +1317,9 @@ class GeneradorSeccion2:
             # Si la ruta está vacía en el documento, usar la construida
             route_doc = content_21.get("route", "")
             contexto["route_21"] = route_doc if route_doc else route_21
-            contexto["image_21"] = procesar_imagen(template, content_21.get("image", "")) or ""
+            imagen_21 = procesar_imagen(template, content_21.get("image", ""))
+            if imagen_21:
+                contexto["image_21"] = imagen_21
             
             # Preparar datos de tablas en formato lista de listas
             table_1_data = content_21.get("table_1", [])
@@ -1323,7 +1569,9 @@ class GeneradorSeccion2:
             else:
                 contexto["table_27_1"] = []
             
-            contexto["image_27"] = procesar_imagen(template, content_27.get("image", "")) or ""
+            imagen_27 = procesar_imagen(template, content_27.get("image", ""))
+            if imagen_27:
+                contexto["image_27"] = imagen_27
             contexto["section_27_1"] = content_27.get("section_1", "")
             contexto["section_27_2"] = content_27.get("section_2", "")
             

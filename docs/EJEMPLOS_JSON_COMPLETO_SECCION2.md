@@ -4,6 +4,194 @@ Este documento contiene todos los ejemplos JSON para las secciones de la Secció
 
 ---
 
+## 📡 Rutas de Consumo API
+
+### Base URL
+```
+http://localhost:8000/api/section2
+```
+
+### Endpoints Disponibles
+
+#### 1. Guardar Datos de una Sección
+**Endpoint:** `POST /api/section2/send_data_section`
+
+**Descripción:** Guarda o actualiza los datos de una subsección específica en MongoDB.
+
+**Body (JSON):**
+```json
+{
+  "anio": 2025,
+  "mes": 11,
+  "user_id": 22,
+  "name_file": "INFORME MENSUAL 2",
+  "section_id": "2.1",
+  "level": 2,
+  "content": {
+    // Contenido específico de la sección
+  }
+}
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Datos de la sección 2.1 guardados exitosamente",
+  "data": {
+    "id": "2.1",
+    "anio": 2025,
+    "mes": 11,
+    "content": { ... }
+  }
+}
+```
+
+---
+
+#### 2. Obtener una Sección Específica
+**Endpoint:** `GET /api/section2/get_section_by_index`
+
+**Descripción:** Obtiene los datos de una subsección específica por su `section_id`.
+
+**Body (JSON):**
+```json
+{
+  "anio": 2025,
+  "mes": 11,
+  "section_id": "2.1"
+}
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Sección 2.1 obtenida exitosamente",
+  "data": {
+    "id": "2.1",
+    "level": 2,
+    "title": "2.1 INFORME DE MESA DE SERVICIO",
+    "content": { ... }
+  }
+}
+```
+
+---
+
+#### 3. Obtener Toda la Sección 2
+**Endpoint:** `GET /api/section2/get_all_section`
+
+**Descripción:** Obtiene todos los datos de la sección 2 completa (incluye todas las subsecciones).
+
+**Body (JSON):**
+```json
+{
+  "anio": 2025,
+  "mes": 11
+}
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "section": "2",
+  "title": "INFORME DE MESA DE SERVICIO",
+  "anio": 2025,
+  "mes": 11,
+  "name_file": "INFORME MENSUAL 2",
+  "index": [
+    {
+      "id": "2",
+      "level": 1,
+      "title": "2. INFORME DE MESA DE SERVICIO",
+      "content": { ... }
+    },
+    {
+      "id": "2.1",
+      "level": 2,
+      "title": "2.1 INFORME DE MESA DE SERVICIO",
+      "content": { ... }
+    },
+    // ... más subsecciones
+  ]
+}
+```
+
+---
+
+#### 4. Generar Documento Word
+**Endpoint:** `POST /api/section2/generate_document`
+
+**Descripción:** Genera el documento Word completo de la sección 2 basándose en los datos guardados en MongoDB.
+
+**Body (JSON):**
+```json
+{
+  "anio": 2025,
+  "mes": 11
+}
+```
+
+**Respuesta exitosa:**
+```json
+{
+  "success": true,
+  "message": "Documento generado exitosamente",
+  "data": {
+    "file_name": "INFORME MENSUAL 2.docx",
+    "file_path": "C:\\Proyectos\\mantto-informe-v1\\output\\seccion_2\\INFORME MENSUAL 2.docx",
+    "relative_path": "seccion_2/INFORME MENSUAL 2.docx"
+  }
+}
+```
+
+---
+
+### Secciones Válidas (`section_id`)
+
+Las siguientes secciones son válidas para usar en `send_data_section`:
+
+- `"2"` - INFORME DE MESA DE SERVICIO (principal)
+- `"2.1"` - INFORME DE MESA DE SERVICIO
+- `"2.2"` - HERRAMIENTAS DE TRABAJO
+- `"2.3"` - VISITAS DE DIAGNÓSTICOS A SUBSISTEMAS
+- `"2.4"` - INFORME CONSOLIDADO DEL ESTADO DE LOS TICKETS ADMINISTRATIVOS
+- `"2.5"` - ESCALAMIENTOS
+- `"2.5.1"` - ENEL
+- `"2.5.2"` - CAÍDA MASIVA
+- `"2.5.3"` - CONECTIVIDAD
+- `"2.6"` - INFORME ACTUALIZADO DE HOJAS DE VIDA
+- `"2.7"` - INFORME EJECUTIVO DEL ESTADO DEL SISTEMA
+
+---
+
+### Flujo de Trabajo Recomendado
+
+1. **Crear/Actualizar secciones individuales:**
+   ```
+   POST /api/section2/send_data_section
+   ```
+   Enviar cada subsección con su `section_id` correspondiente.
+
+2. **Verificar datos guardados:**
+   ```
+   GET /api/section2/get_all_section
+   ```
+   Obtener toda la sección para verificar que todos los datos estén guardados.
+
+3. **Generar documento final:**
+   ```
+   POST /api/section2/generate_document
+   ```
+   Generar el documento Word con todos los datos guardados.
+
+---
+
+## 📋 Ejemplos JSON por Sección
+
+---
+
 ## Sección 2 - INFORME DE MESA DE SERVICIO
 
 ```json

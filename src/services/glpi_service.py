@@ -113,20 +113,20 @@ class GLPIService:
         
         # TODO: Reemplazar con el query real que el usuario proporcionará
         query = """
-        SELECT 
-            l.building AS subsistema,
-            COUNT(*) AS ejecutadas
-        FROM glpi_tickets t
-        INNER JOIN glpi_locations l ON l.id = t.locations_id
-        INNER JOIN glpi_itilcategories c on c.id = t.itilcategories_id
-        WHERE t.is_deleted = 0
-          AND c.id = 75
-          AND l.building IS NOT NULL
-          AND l.building != ''
-          AND YEAR(t.date) = %s 
-          AND MONTH(t.date) = %s
-        GROUP BY l.building
-        ORDER BY l.building ASC
+            SELECT 
+                l.building AS subsistema,
+                COUNT(*) AS ejecutadas
+            FROM glpi_tickets t
+            INNER JOIN glpi_locations l ON l.id = t.locations_id
+            INNER JOIN glpi_itilcategories c on c.id = t.itilcategories_id
+            WHERE t.is_deleted = 0
+            AND c.id = 75
+            AND l.building IS NOT NULL
+            AND l.building != ''
+            AND YEAR(t.date) = %s 
+            AND MONTH(t.date) = %s
+            GROUP BY l.building
+            ORDER BY l.building ASC
         """
         
         try:
