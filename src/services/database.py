@@ -25,22 +25,58 @@ def get_database():
     global _database, _client
     
     if _database is None:
-        # Usar las variables específicas del .env
-        mongo_uri = os.getenv("MONGODB_URI") or getattr(config, 'MONGODB_URI', None)
-        mongo_db = os.getenv("MONGODB_DB_NAME") or getattr(config, 'MONGODB_DB_NAME', None)
+        # Obtener variables de config (ya cargadas desde .env)
+        mongo_uri = config.MONGODB_URI
+        mongo_db_name = config.MONGODB_DB_NAME
+        mongo_user = config.MONGODB_USER
+        mongo_password = config.MONGODB_PASSWORD
+        mongo_host = config.MONGODB_HOST
+        mongo_port = config.MONGODB_PORT
+        mongo_auth_source = config.MONGODB_AUTH_SOURCE
         
-        if not mongo_uri:
-            raise ValueError("MONGODB_URI no está configurado en .env o config.py")
+        # Validar que tenemos al menos host y nombre de base de datos
+        if not mongo_host:
+            raise ValueError("MONGODB_HOST no está configurado en .env o config.py")
         
-        if not mongo_db:
+        if not mongo_db_name:
             raise ValueError("MONGODB_DB_NAME no está configurado en .env o config.py")
         
+        # Si MONGODB_URI está definida y es válida, usarla directamente
+        if mongo_uri and mongo_uri.strip() and (mongo_uri.startswith("mongodb://") or mongo_uri.startswith("mongodb+srv://")):
+            # Usar la URI completa del .env
+            final_uri = mongo_uri
+        else:
+        
+            # Construir URI desde las variables individuales
+            if mongo_user and mongo_password:
+                # Construir URI con autenticación
+                final_uri = f"mongodb://{mongo_user}:{mongo_password}@{mongo_host}:{mongo_port}/?authSource={mongo_db_name}"
+            else:
+                # URI sin autenticación (solo para desarrollo local)
+                final_uri = f"mongodb://{mongo_host}:{mongo_port}/{mongo_db_name}"
+      
         try:
-            _client = AsyncIOMotorClient(mongo_uri)
-            _database = _client[mongo_db]
-            logger.info(f"Conectado a MongoDB: {mongo_db}")
+            _client = AsyncIOMotorClient(final_uri)
+            _database = _client[mongo_db_name]
+            
+            # Ocultar contraseña en logs
+            uri_log = final_uri
+            if "@" in final_uri:
+                # Ocultar contraseña en el log
+                parts = final_uri.split("@")
+                if len(parts) == 2:
+                    auth_part = parts[0]
+                    if ":" in auth_part:
+                        user_part = auth_part.split(":")[0]
+                        uri_log = f"mongodb://{user_part}:***@{parts[1]}"
+            
+            logger.info(f"Conectado a MongoDB: {mongo_db_name}")
+            logger.info(f"MongoDB Host: {mongo_host}:{mongo_port}")
+            logger.debug(f"MongoDB URI: {uri_log}")
         except Exception as e:
             logger.error(f"Error al conectar a MongoDB: {e}")
+            logger.error(f"Intentando conectar a: {mongo_host}:{mongo_port}")
+            logger.error(f"Base de datos: {mongo_db_name}")
             raise
     
     return _database
@@ -50,37 +86,16 @@ async def connect_to_mongo():
     """Conecta a MongoDB con autenticación si está configurada"""
     global _client, _database
     
-    mongodb_uri = config.MONGODB_URI
-    db_name = config.MONGODB_DB_NAME
+    # Usar la misma lógica que get_database()
+    if _database is None:
+        get_database()
     
     try:
-        # Construir URI con autenticación si hay usuario y contraseña
-        if config.MONGODB_USER and config.MONGODB_PASSWORD:
-            # Si ya viene una URI completa en MONGODB_URI, usarla
-            if not mongodb_uri.startswith("mongodb://") or "@" in mongodb_uri:
-                # Ya tiene autenticación o es una URI completa
-                pass
-            else:
-                # Construir URI con autenticación
-                mongodb_uri = f"mongodb://{config.MONGODB_USER}:{config.MONGODB_PASSWORD}@{config.MONGODB_HOST}:{config.MONGODB_PORT}/{db_name}?authSource={config.MONGODB_AUTH_SOURCE}"
-        
-        _client = AsyncIOMotorClient(mongodb_uri)
-        _database = _client[db_name]
-        
-        # Ocultar contraseña en logs
-        uri_log = mongodb_uri
-        if config.MONGODB_PASSWORD:
-            uri_log = mongodb_uri.replace(config.MONGODB_PASSWORD, "***")
-        
-        logger.info(f"Conectado a MongoDB: {db_name}")
-        logger.debug(f"MongoDB URI: {uri_log}")
-        
         # Verificar conexión
         await _client.admin.command('ping')
         logger.info("Conexión a MongoDB verificada exitosamente")
-        
     except Exception as e:
-        logger.error(f"Error al conectar a MongoDB: {e}")
+        logger.error(f"Error al verificar conexión a MongoDB: {e}")
         raise
 
 

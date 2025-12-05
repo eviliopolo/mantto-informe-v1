@@ -36,6 +36,16 @@ from src.utils.documento_utils import convertir_url_sharepoint_a_ruta_relativa
 
 logger = logging.getLogger(__name__)
 
+from docxtpl import DocxTemplate
+from docx import Document
+from pathlib import Path
+from docxtpl import InlineImage
+from docx.shared import Mm
+import base64
+from PIL import Image
+from io import BytesIO
+import logging
+import re
 
 class GeneradorSeccion2:
     @property

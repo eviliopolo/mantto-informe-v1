@@ -51,23 +51,6 @@ MONGODB_AUTH_SOURCE = os.getenv(
     "MONGODB_AUTH_SOURCE", "admin"
 )  # Base de datos de autenticación
 
-
-# Construir URI de MongoDB
-def _build_mongodb_uri() -> str:
-    """Construye la URI de MongoDB con o sin autenticación"""
-    if MONGODB_USER and MONGODB_PASSWORD:
-        # URI con autenticación
-        return f"mongodb://{MONGODB_USER}:{MONGODB_PASSWORD}@{MONGODB_HOST}:{MONGODB_PORT}/{MONGODB_DB_NAME}?authSource={MONGODB_AUTH_SOURCE}"
-    else:
-        # URI sin autenticación (desarrollo local)
-        return f"mongodb://{MONGODB_HOST}:{MONGODB_PORT}/{MONGODB_DB_NAME}"
-
-
-# URI completa de MongoDB
-# Si MONGODB_URI está definida en .env, se usa esa (permite URI completa personalizada)
-# Si no, se construye automáticamente con las variables individuales
-MONGODB_URI = os.getenv("MONGODB_URI") or _build_mongodb_uri()
-
 # ============================================================================
 # CONFIGURACIÓN JWT
 # ============================================================================
@@ -342,7 +325,6 @@ SHAREPOINT_CLIENT_SECRET = os.getenv("SHAREPOINT_CLIENT_SECRET", "")
 SHAREPOINT_TENANT_ID = os.getenv("SHAREPOINT_TENANT_ID", "")
 # Ruta base adicional en SharePoint (ej: "Documentos compartidos" o "Shared Documents" o carpeta base)
 SHAREPOINT_BASE_PATH = os.getenv("SHAREPOINT_BASE_PATH", "")
-
 # Configuración GLPI MySQL
 GLPI_MYSQL_HOST = os.getenv("GLPI_MYSQL_HOST", "")
 GLPI_MYSQL_PORT = int(os.getenv("GLPI_MYSQL_PORT", "3306"))
@@ -355,4 +337,26 @@ MESES_LISTA = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
+
+# Configuración MongoDB
+MONGODB_URI = os.getenv("MONGODB_URI", "")
+MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "")
+
+# ============================================================================
+# CONFIGURACIÓN DE DIRECTORIOS
+# ============================================================================
+# Directorio base del proyecto
+BASE_DIR = Path(__file__).parent
+
+# Directorio de salida para documentos generados
+OUTPUT_DIR = BASE_DIR / "output"
+
+# Directorio de templates Word
+TEMPLATES_DIR = BASE_DIR / "src" / "resources" / "templates"
+
+# Directorio de datos fuente (JSON, CSV, Excel)
+FUENTES_DIR = BASE_DIR / "src" / "resources" / "fuentes"
+
+# Directorio de datos fijos
+DATA_DIR = BASE_DIR / "src" / "resources"
 

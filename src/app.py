@@ -1,25 +1,12 @@
 """
 Aplicación principal FastAPI para el sistema de generación de informes
 """
-import os
-# """
-# Aplicación principal FastAPI para el sistema de autenticación y roles
-# """
 import logging
+import config
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-import uvicorn
-
-# Cargar variables de entorno
-load_dotenv()
-
-# Configurar logging
-
-
-import config
-from src.routes import auth_routes
+from src.routes import routes
 from src.services.database import connect_to_mongo, close_mongo_connection
 
 # # Configurar logging
@@ -29,7 +16,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -78,72 +64,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Incluir rutas
-try:
-    from src.routes import obligaciones_routes
-    app.include_router(obligaciones_routes.router, prefix="/api")
-    logger.info("✓ Rutas de obligaciones incluidas")
-except Exception as e:
-    logger.warning(f"No se pudieron incluir rutas de obligaciones: {e}")
-
-try:
-    from src.routes import comunicados_routes
-    app.include_router(comunicados_routes.router)
-    logger.info("✓ Rutas de comunicados incluidas")
-except Exception as e:
-    logger.warning(f"No se pudieron incluir rutas de comunicados: {e}")
-
-try:
-    from src.routes import seccion1_routes
-    app.include_router(seccion1_routes.router)
-    logger.info("✓ Rutas de sección 1 incluidas")
-except Exception as e:
-    logger.warning(f"No se pudieron incluir rutas de sección 1: {e}")
-
-# Intentar incluir otras rutas si existen
-try:
-    from src.routes import section1_routes
-    app.include_router(section1_routes.router, prefix="/api")
-    logger.info("✓ Rutas de sección 1 (legacy) incluidas")
-except ImportError:
-    logger.info("Rutas de sección 1 (legacy) no disponibles")
-
-try:
-    from src.routes import section2_routes
-    app.include_router(section2_routes.router, prefix="/api")
-    logger.info("✓ Rutas de sección 2 incluidas")
-except Exception as e:
-    logger.error(f"Error al incluir rutas de sección 2: {e}", exc_info=True)
-    logger.info("Rutas de sección 2 no disponibles")
-
-try:
-    from src.routes import auth_routes
-    app.include_router(auth_routes.router, prefix="/api")
-    logger.info("✓ Rutas de autenticación incluidas")
-except ImportError:
-    logger.info("Rutas de autenticación no disponibles")
-
-try:
-    from src.routes import inventario_routes
-    app.include_router(inventario_routes.router, prefix="/api")
-    logger.info("✓ Rutas de inventario (sección 4) incluidas")
-except Exception as e:
-    logger.warning(f"No se pudieron incluir rutas de inventario: {e}")
-
-try:
-    from src.routes import seccion5_routes
-    app.include_router(seccion5_routes.router)
-    logger.info("✓ Rutas de sección 5 (laboratorio) incluidas")
-except Exception as e:
-    logger.warning(f"No se pudieron incluir rutas de sección 5: {e}")
-
-try:
-    from src.routes import seccion4_routes
-    app.include_router(seccion4_routes.router)
-    logger.info("✓ Rutas de sección 4 (bienes y servicios) incluidas")
-except Exception as e:
-    logger.warning(f"No se pudieron incluir rutas de sección 4: {e}")
-
 
 @app.get("/", tags=["Root"])
 async def root():
@@ -168,4 +88,11 @@ async def root():
         }
     }
 
+    
+try: 
+    for route in routes:
+        app.include_router(route, prefix="/api")
+        logger.info(f"✓ Rutas de {route.tags[0]} incluidas")
+except Exception as e:
+    logger.warning(f"No se pudieron incluir rutas de {route.tags[0]}: {e}")
 

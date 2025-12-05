@@ -44,19 +44,7 @@ async def generate_document(
 @router.post("/seccion_2_preview", status_code=status.HTTP_200_OK)
 async def seccion_2_preview(
     data: Dict[str, Any] = Body(...),    
-) -> Response:
-    """
-    Genera el documento de la sección 2 y lo retorna como bytes para preview.
-    
-    Body esperado:
-    {
-        "anio": 2025,
-        "mes": 11
-    }
-    
-    Retorna:
-    Archivo .docx como bytes (para usar con docx-preview en el frontend)
-    """
+) -> Response:   
     return await section2_controller.seccion_2_preview(data)
 
   
