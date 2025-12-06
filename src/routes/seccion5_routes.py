@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from typing import Dict, Any
 from src.controllers.seccion5_controller import Seccion5Controller
 
-router = APIRouter(prefix="/api/seccion5", tags=["seccion5"])
+router = APIRouter(prefix="/seccion5", tags=["seccion5"])
 controller = Seccion5Controller()
 
 

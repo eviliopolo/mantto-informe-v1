@@ -18,7 +18,16 @@ def numero_a_letras(numero: Union[int, float], incluir_moneda: bool = True) -> s
         Ejemplo: "CINCUENTA Y SEIS MILLONES NOVECIENTOS NUEVE MIL PESOS M/CTE"
     """
     try:
-        parte_entera = int(numero)
+        # Validar que el número sea válido
+        if numero is None:
+            return "CERO PESOS M/CTE" if incluir_moneda else "CERO"
+        
+        parte_entera = int(abs(numero))  # Usar valor absoluto para evitar problemas
+        
+        # Si es cero, retornar directamente
+        if parte_entera == 0:
+            return "CERO PESOS M/CTE" if incluir_moneda else "CERO"
+        
         texto = num2words(parte_entera, lang='es')
         texto = texto.upper()
         
@@ -30,7 +39,11 @@ def numero_a_letras(numero: Union[int, float], incluir_moneda: bool = True) -> s
         
         return texto
     except Exception as e:
-        return f"{numero:,.0f}".replace(",", ".")
+        # Si hay error, retornar formato numérico como fallback
+        try:
+            return f"{numero:,.0f}".replace(",", ".")
+        except:
+            return "CERO PESOS M/CTE" if incluir_moneda else "CERO"
 
 
 def formato_moneda_cop(numero: Union[int, float]) -> str:
@@ -43,12 +56,22 @@ def formato_moneda_cop(numero: Union[int, float]) -> str:
     Returns:
         String formateado: "$56.909.324"
     """
-    # Formatear con separadores de miles
-    # Python usa coma como separador, Colombia usa punto
-    texto = f"{numero:,.0f}"
-    # Reemplazar: coma -> temporal, punto -> coma, temporal -> punto
-    texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"${texto}"
+    try:
+        # Validar que el número sea válido
+        if numero is None:
+            return "$0"
+        
+        # Asegurar que sea un número
+        num_valor = float(numero)
+        
+        # Formatear con separadores de miles
+        # Python usa coma como separador, Colombia usa punto
+        texto = f"{num_valor:,.0f}"
+        # Reemplazar: coma -> temporal, punto -> coma, temporal -> punto
+        texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"${texto}"
+    except (ValueError, TypeError):
+        return "$0"
 
 
 def formato_cantidad(numero: Union[int, float], decimales: int = 0) -> str:

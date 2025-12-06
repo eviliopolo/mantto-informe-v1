@@ -3,17 +3,39 @@ Aplicación principal FastAPI para el sistema de generación de informes
 """
 import logging
 import config
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.routes import routes
 from src.services.database import connect_to_mongo, close_mongo_connection
 
-# # Configurar logging
-logging.basicConfig(
-    level=logging.INFO if config.DEBUG else logging.WARNING,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+# Configurar logging con archivo y consola
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+
+# Crear handlers
+file_handler = logging.FileHandler(
+    log_dir / "app.log",
+    encoding="utf-8",
+    mode="a"  # append mode
 )
+console_handler = logging.StreamHandler()
+
+# Formato para los logs
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Configurar el logger raíz
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
 
 logger = logging.getLogger(__name__)
 

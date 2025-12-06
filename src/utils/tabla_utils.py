@@ -183,15 +183,25 @@ def preparar_datos_tabla(datos: List[Dict[str, Any]], headers: List[str], campos
                     total = 0
                     for item in datos:
                         valor = item.get(campo, "")
-                        if valor:
-                            if isinstance(valor, str):
-                                valor_limpio = valor.replace(",", "").replace(" ", "").strip()
-                                if valor_limpio:
-                                    total += float(valor_limpio)
-                            else:
-                                total += float(valor)
-                    fila_total.append(str(int(total)) if total == int(total) else str(total))
-                except (ValueError, TypeError):
+                        if valor is not None and valor != "":
+                            try:
+                                if isinstance(valor, str):
+                                    valor_limpio = valor.replace(",", "").replace(" ", "").replace("$", "").strip()
+                                    if valor_limpio and valor_limpio != "-":
+                                        total += float(valor_limpio)
+                                elif isinstance(valor, (int, float)):
+                                    total += float(valor)
+                            except (ValueError, TypeError, ZeroDivisionError) as e:
+                                # Ignorar valores inválidos, continuar con el siguiente
+                                logger.debug(f"Valor inválido en campo {campo}: {valor}, error: {e}")
+                                continue
+                    # Evitar división por cero
+                    if total == int(total):
+                        fila_total.append(str(int(total)))
+                    else:
+                        fila_total.append(str(total))
+                except (ValueError, TypeError, ZeroDivisionError) as e:
+                    logger.warning(f"Error al calcular total para campo {campo}: {e}")
                     fila_total.append("")
         table_data.append(fila_total)
     return table_data
@@ -450,16 +460,108 @@ def reemplazar_multiples_placeholders_con_tablas(doc: Document, placeholders_tab
     # Buscar todos los placeholders en una sola pasada
     tiempo_busqueda = time.time()
     paragraphs_to_process = []
+    
+    # Log de placeholders que se buscan
+    logger.info(f"  🔍 Buscando placeholders: {list(placeholders_set)}")
+    
+    # Buscar en TODOS los párrafos (no solo los primeros)
+    logger.info(f"  📄 Buscando en {len(doc.paragraphs)} párrafos del documento...")
     for i, paragraph in enumerate(doc.paragraphs):
         texto_parrafo = paragraph.text  # Acceder una sola vez
+        # Log de los primeros párrafos para depuración
+        if i < 10:
+            logger.debug(f"  Párrafo {i}: '{texto_parrafo[:150]}...'")
+        
         for placeholder in placeholders_set:
+            # Buscar el placeholder exacto
             if placeholder in texto_parrafo:
                 table_data = placeholders_tablas[placeholder]
                 if table_data and len(table_data) > 0:
                     paragraphs_to_process.append((i, paragraph, placeholder, table_data))
+                    logger.info(f"  ✓ Placeholder '{placeholder}' encontrado en párrafo {i}: '{texto_parrafo[:100]}...'")
                     break  # Solo procesar un placeholder por párrafo
+            # También buscar sin los corchetes dobles (por si Jinja2 los procesó diferente)
+            elif placeholder.replace("[[", "").replace("]]", "") in texto_parrafo:
+                logger.warning(f"  ⚠️ Placeholder '{placeholder}' encontrado sin corchetes en párrafo {i}")
+                # Intentar buscar la variación
+                placeholder_variacion = placeholder.replace("[[", "").replace("]]", "")
+                if placeholder_variacion in texto_parrafo:
+                    table_data = placeholders_tablas[placeholder]
+                    if table_data and len(table_data) > 0:
+                        paragraphs_to_process.append((i, paragraph, placeholder, table_data))
+                        logger.info(f"  ✓ Placeholder procesado como variación en párrafo {i}")
+                        break
+            # Buscar también sin espacios (por si Word agregó espacios)
+            elif placeholder.replace(" ", "") in texto_parrafo.replace(" ", ""):
+                logger.warning(f"  ⚠️ Placeholder '{placeholder}' encontrado con espacios diferentes en párrafo {i}")
+                table_data = placeholders_tablas[placeholder]
+                if table_data and len(table_data) > 0:
+                    paragraphs_to_process.append((i, paragraph, placeholder, table_data))
+                    logger.info(f"  ✓ Placeholder procesado con espacios en párrafo {i}")
+                    break
+    
+    # Si no se encontraron en párrafos, buscar en tablas existentes y otros lugares
+    if len(paragraphs_to_process) == 0:
+        logger.warning(f"  ⚠️ No se encontraron placeholders en párrafos. Buscando en tablas, headers, footers...")
+        
+        # Buscar en tablas existentes
+        for table_idx, table in enumerate(doc.tables):
+            for row_idx, row in enumerate(table.rows):
+                for cell_idx, cell in enumerate(row.cells):
+                    # Buscar en todos los párrafos de la celda
+                    for para_idx, para in enumerate(cell.paragraphs):
+                        texto_celda = para.text
+                        for placeholder in placeholders_set:
+                            if placeholder in texto_celda:
+                                table_data = placeholders_tablas[placeholder]
+                                if table_data and len(table_data) > 0:
+                                    # Reemplazar el contenido de la celda con la tabla
+                                    logger.info(f"  ✓ Placeholder '{placeholder}' encontrado en tabla {table_idx}, celda ({row_idx}, {cell_idx}), párrafo {para_idx}")
+                                    # Limpiar la celda
+                                    cell.text = ""
+                                    # Insertar tabla después de la fila de la tabla
+                                    # Necesitamos insertar la tabla después de la tabla existente
+                                    parent = table._element.getparent()
+                                    table_idx_in_parent = parent.index(table._element)
+                                    
+                                    # Crear la tabla
+                                    from src.utils.tabla_utils import _crear_tabla_procesada
+                                    tabla_element, _ = _crear_tabla_procesada(table_data, estilos_tabla)
+                                    if tabla_element:
+                                        # Insertar después de la tabla actual
+                                        parent.insert(table_idx_in_parent + 1, tabla_element)
+                                        paragraphs_to_process.append((None, None, placeholder, table_data))  # Marcar como procesado
+                                        logger.info(f"  ✓ Tabla insertada después de tabla {table_idx}")
+                                    break
+        
+        # Buscar en headers y footers
+        for section in doc.sections:
+            # Headers
+            for header in [section.header]:
+                for para in header.paragraphs:
+                    texto_para = para.text
+                    for placeholder in placeholders_set:
+                        if placeholder in texto_para:
+                            logger.info(f"  ✓ Placeholder '{placeholder}' encontrado en header")
+                            # Nota: Los headers/footers requieren un manejo especial
+                            break
+            
+            # Footers
+            for footer in [section.footer]:
+                for para in footer.paragraphs:
+                    texto_para = para.text
+                    for placeholder in placeholders_set:
+                        if placeholder in texto_para:
+                            logger.info(f"  ✓ Placeholder '{placeholder}' encontrado en footer")
+                            break
+    
     tiempo_busqueda_total = time.time() - tiempo_busqueda
     logger.info(f"  🔍 Búsqueda de placeholders: {tiempo_busqueda_total:.2f}s ({len(paragraphs_to_process)} tablas encontradas)")
+    
+    if len(paragraphs_to_process) == 0:
+        logger.warning(f"  ⚠️ ADVERTENCIA: No se encontraron placeholders en el documento. Verifica que el template tenga:")
+        for placeholder in placeholders_set:
+            logger.warning(f"     - {placeholder}")
     
     # Procesar tablas en paralelo usando ThreadPoolExecutor
     tiempo_total_procesamiento = time.time()

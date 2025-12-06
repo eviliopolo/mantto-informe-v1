@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 from src.controllers.comunicados_controller import ComunicadosController
 
-router = APIRouter(prefix="/api/comunicados", tags=["comunicados"])
+router = APIRouter(prefix="/comunicados", tags=["comunicados"])
 controller = ComunicadosController()
 
 

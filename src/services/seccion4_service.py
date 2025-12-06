@@ -23,178 +23,264 @@ class Seccion4Service:
             self.inventario_repo = InventarioRepository(db)
         return self.inventario_repo
     
-    async def cargar_datos_desde_mongodb(
+    async def construir_documento_desde_mongodb(
         self,
         anio: int,
         mes: int,
-        generador: GeneradorSeccion4,
         db
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
-        Carga datos desde MongoDB y los asigna al generador
+        Construye el documento en formato esperado por el nuevo generador desde MongoDB
         
         Args:
             anio: Año del informe
             mes: Mes del informe
-            generador: Instancia del generador de sección 4
             db: Instancia de la base de datos MongoDB
+            
+        Returns:
+            Diccionario con la estructura esperada por el generador:
+            {
+                "anio": 2025,
+                "mes": 11,
+                "index": [
+                    {"id": "4", "level": 1, "title": "...", "content": {...}},
+                    {"id": "4.1", "level": 2, "title": "...", "content": {...}},
+                    ...
+                ]
+            }
         """
         try:
-            logger.info(f"Cargando datos de inventario desde MongoDB para {anio}-{mes}, sección 4...")
+            logger.info(f"Construyendo documento desde MongoDB para {anio}-{mes}, sección 4...")
             
             repository = self._get_repository(db)
             inventario = await repository.get_inventario(anio, mes, "4")
             
+            # Log para depuración
+            if inventario:
+                logger.info(f"Datos de inventario obtenidos: claves={list(inventario.keys())}")
+                logger.info(f"Subsecciones directas: {list(inventario.get('subsecciones', {}).keys())}")
+                # Verificar si hay estructura anidada con "data"
+                if "data" in inventario:
+                    data = inventario.get("data", {})
+                    logger.info(f"Estructura con 'data' encontrada: subsecciones={list(data.get('subsecciones', {}).keys())}")
+                    # Usar la estructura con "data" si existe
+                    inventario = data
+            
             if not inventario:
                 logger.warning(f"No se encontró inventario para {anio}-{mes}")
-                generador.datos = {}
-                return
+                # Retornar estructura vacía
+                return {
+                    "anio": anio,
+                    "mes": mes,
+                    "index": [
+                        {"id": "4", "level": 1, "title": "4. INFORME DE BIENES Y SERVICIOS", "content": {}},
+                        {"id": "4.1", "level": 2, "title": "4.1 GESTIÓN DE INVENTARIO", "content": {}},
+                        {"id": "4.2", "level": 2, "title": "4.2 ENTRADAS ALMACÉN SDSCJ", "content": {}},
+                        {"id": "4.3", "level": 2, "title": "4.3 ENTREGA EQUIPOS NO OPERATIVOS ALMACÉN SDSCJ", "content": {}},
+                        {"id": "4.4", "level": 2, "title": "4.4 GESTIONES DE INCLUSIÓN A LA BOLSA", "content": {}},
+                    ]
+                }
             
             # Obtener subsecciones
             subsecciones = inventario.get("subsecciones", {})
+            logger.info(f"Subsecciones disponibles: {list(subsecciones.keys())}")
             subseccion_4 = subsecciones.get("4", {})
+            logger.info(f"Subsección 4 disponible: {bool(subseccion_4)}, claves: {list(subseccion_4.keys()) if subseccion_4 else []}")
             
-            # Transformar datos de MongoDB al formato que espera el generador
-            datos_transformados = {}
+            # Construir estructura index
+            index = []
+            
+            # Sección 4 (principal)
+            index.append({
+                "id": "4",
+                "level": 1,
+                "title": "4. INFORME DE BIENES Y SERVICIOS",
+                "content": {
+                    "image": ""  # Si hay imagen en MongoDB, agregarla aquí
+                }
+            })
             
             # 4.1 Gestión de Inventario
             sub_4_1 = subseccion_4.get("1", {})
-            if sub_4_1:
-                datos_transformados["gestion_inventario"] = {
-                    "texto": sub_4_1.get("texto", ""),
-                    "ruta": sub_4_1.get("ruta", "")
-                }
+            logger.info(f"Sección 4.1 - Datos obtenidos: texto={bool(sub_4_1.get('texto'))}, ruta={bool(sub_4_1.get('ruta'))}, tabla={len(sub_4_1.get('tabla', []))} registros")
+            
+            # Combinar texto y ruta como se hace en inventario_routes
+            texto_41 = sub_4_1.get("texto", "")
+            ruta_41 = sub_4_1.get("ruta", "")
+            texto_combinado = ""
+            if texto_41 and ruta_41:
+                texto_combinado = f"{texto_41}\n{ruta_41}"
+            elif texto_41:
+                texto_combinado = texto_41
+            elif ruta_41:
+                texto_combinado = ruta_41
+            
+            # Obtener tabla - puede estar en diferentes campos
+            tabla_41 = sub_4_1.get("tabla", [])
+            if not tabla_41:
+                # Intentar otros nombres posibles
+                tabla_41 = sub_4_1.get("tablaInventario", [])
+            if not tabla_41:
+                tabla_41 = sub_4_1.get("tablaGestion", [])
+            
+            logger.info(f"Sección 4.1 - Texto combinado: {len(texto_combinado)} caracteres, Tabla: {len(tabla_41)} registros")
+            
+            content_41 = {
+                "texto": texto_combinado,
+                "tabla": tabla_41
+            }
+            index.append({
+                "id": "4.1",
+                "level": 2,
+                "title": "4.1 GESTIÓN DE INVENTARIO",
+                "content": content_41
+            })
             
             # 4.2 Entradas Almacén SDSCJ
             sub_4_2 = subseccion_4.get("2", {})
             if sub_4_2 and sub_4_2.get("hayEntradas", False):
                 tabla_entradas = sub_4_2.get("tablaEntradas", [])
                 # Transformar tablaEntradas al formato esperado
-                items = []
+                elementos = []
                 for item in tabla_entradas:
-                    items.append({
-                        "descripcion": item.get("itemBolsa", ""),
+                    elementos.append({
+                        "descripcion": item.get("itemBolsa", item.get("descripcion", "")),
                         "cantidad": item.get("cantidad", 0),
-                        "unidad": "UN",  # Por defecto
-                        "valor_unitario": 0,  # No está en el JSON
-                        "valor_total": 0  # No está en el JSON
+                        "unidad": item.get("unidad", "UN"),
+                        "valor_unitario": item.get("valor_unitario", item.get("valorUnitario", 0)),
+                        "valor_total": item.get("valor_total", item.get("valorTotal", 0))
                     })
                 
-                datos_transformados["entradas_almacen"] = {
+                content_42 = {
+                    "texto": sub_4_2.get("texto", ""),
                     "comunicado": {
                         "numero": sub_4_2.get("comunicado", ""),
-                        "titulo": "",
                         "fecha": sub_4_2.get("fechaIngreso", "")
                     },
-                    "texto": sub_4_2.get("texto", ""),
-                    "items": items,
-                    "anexos": []
+                    "elementos": elementos,
+                    "anexos": sub_4_2.get("anexos", [])
                 }
+                logger.info(f"Sección 4.2 - hayEntradas=True, {len(elementos)} elementos, texto: {len(sub_4_2.get('texto', ''))} caracteres")
             else:
-                datos_transformados["entradas_almacen"] = {
+                content_42 = {
+                    "texto": sub_4_2.get("texto", "") if sub_4_2 else "",
                     "comunicado": {},
-                    "texto": "",
-                    "items": [],
+                    "elementos": [],
                     "anexos": []
                 }
+                logger.info(f"Sección 4.2 - hayEntradas={sub_4_2.get('hayEntradas', False) if sub_4_2 else False}")
+            
+            index.append({
+                "id": "4.2",
+                "level": 2,
+                "title": "4.2 ENTRADAS ALMACÉN SDSCJ",
+                "content": content_42
+            })
             
             # 4.3 Entrega Equipos No Operativos
             sub_4_3 = subseccion_4.get("3", {})
-            if sub_4_3:
-                equipos_data = {
-                    "comunicado": {
-                        "numero": sub_4_3.get("tablaEquiposNoOperativos", {}).get("comunicado", ""),
-                        "titulo": "",
-                        "fecha": sub_4_3.get("tablaEquiposNoOperativos", {}).get("fecha", "")
-                    },
-                    "texto": sub_4_3.get("texto", ""),
-                    "equipos": [],
-                    "anexos": []
-                }
-                
-                # Equipos no operativos
-                if sub_4_3.get("haySalidas", False):
-                    tabla_detalle = sub_4_3.get("tablaDetalleEquipos", [])
-                    equipos = []
-                    for eq in tabla_detalle:
-                        equipos.append({
-                            "descripcion": eq.get("equipo", ""),
-                            "serial": "",
-                            "cantidad": eq.get("cantidad", 0),
-                            "motivo": sub_4_3.get("textoBajasNoOperativas", ""),
-                            "valor": 0
-                        })
-                    equipos_data["equipos"] = equipos
-                    equipos_data["texto"] = sub_4_3.get("textoBajasNoOperativas", "")
-                
-                # Siniestros
-                if sub_4_3.get("haySiniestros", False):
-                    tabla_siniestros = sub_4_3.get("tablaSiniestros", {})
-                    tabla_detalle_siniestros = sub_4_3.get("tablaDetalleSiniestros", [])
-                    
-                    # Agregar equipos de siniestros
-                    for sin in tabla_detalle_siniestros:
-                        equipos_data["equipos"].append({
-                            "descripcion": sin.get("equipo", ""),
-                            "serial": "",
-                            "cantidad": sin.get("cantidad", 0),
-                            "motivo": sub_4_3.get("textoSiniestros", ""),
-                            "valor": 0
-                        })
-                    
-                    equipos_data["texto"] += f"\n\n{sub_4_3.get('textoSiniestros', '')}"
-                    equipos_data["texto"] += f"\n{sub_4_3.get('textoReintegro', '')}"
-                
-                datos_transformados["equipos_no_operativos"] = equipos_data
-            else:
-                datos_transformados["equipos_no_operativos"] = {
-                    "comunicado": {},
-                    "texto": "",
-                    "equipos": [],
-                    "anexos": []
-                }
+            equipos = []
+            
+            # Equipos no operativos
+            if sub_4_3.get("haySalidas", False):
+                tabla_detalle = sub_4_3.get("tablaDetalleEquipos", [])
+                logger.info(f"Sección 4.3 - haySalidas=True, {len(tabla_detalle)} equipos no operativos")
+                for eq in tabla_detalle:
+                    equipos.append({
+                        "descripcion": eq.get("equipo", ""),
+                        "serial": eq.get("serial", ""),
+                        "cantidad": eq.get("cantidad", 1),
+                        "motivo": sub_4_3.get("textoBajasNoOperativas", ""),
+                        "valor": eq.get("valor", 0)
+                    })
+            
+            # Siniestros
+            if sub_4_3.get("haySiniestros", False):
+                tabla_detalle_siniestros = sub_4_3.get("tablaDetalleSiniestros", [])
+                logger.info(f"Sección 4.3 - haySiniestros=True, {len(tabla_detalle_siniestros)} equipos siniestros")
+                for sin in tabla_detalle_siniestros:
+                    equipos.append({
+                        "descripcion": sin.get("equipo", ""),
+                        "serial": sin.get("serial", ""),
+                        "cantidad": sin.get("cantidad", 1),
+                        "motivo": sub_4_3.get("textoSiniestros", ""),
+                        "valor": sin.get("valor", 0)
+                    })
+            
+            tabla_equipos = sub_4_3.get("tablaEquiposNoOperativos", {})
+            # tablaEquiposNoOperativos es un objeto, no un array
+            if isinstance(tabla_equipos, list) and len(tabla_equipos) > 0:
+                tabla_equipos = tabla_equipos[0]
+            elif not isinstance(tabla_equipos, dict):
+                tabla_equipos = {}
+            
+            content_43 = {
+                "comunicado": {
+                    "numero": tabla_equipos.get("comunicado", ""),
+                    "fecha": tabla_equipos.get("fecha", "")
+                },
+                "equipos": equipos,
+                "anexos": sub_4_3.get("anexos", [])
+            }
+            logger.info(f"Sección 4.3 - Total equipos: {len(equipos)}")
+            
+            index.append({
+                "id": "4.3",
+                "level": 2,
+                "title": "4.3 ENTREGA EQUIPOS NO OPERATIVOS ALMACÉN SDSCJ",
+                "content": content_43
+            })
             
             # 4.4 Gestiones de Inclusión a la Bolsa
             sub_4_4 = subseccion_4.get("4", {})
-            if sub_4_4:
-                tabla_gestion = sub_4_4.get("tablaGestionInclusion", {})
-                datos_transformados["inclusiones_bolsa"] = {
-                    "comunicado": {
-                        "numero": tabla_gestion.get("consecutivoETB", ""),
-                        "titulo": "",
-                        "fecha": tabla_gestion.get("fecha", "")
-                    },
-                    "texto": sub_4_4.get("texto", ""),
-                    "estado": "En proceso",
-                    "items": [{
-                        "descripcion": tabla_gestion.get("descripcion", ""),
-                        "cantidad": 1,
-                        "unidad": "UN",
-                        "valor_unitario": 0,
-                        "valor_total": 0,
-                        "justificacion": ""
-                    }],
-                    "anexos": []
-                }
-            else:
-                datos_transformados["inclusiones_bolsa"] = {
-                    "comunicado": {},
-                    "texto": "",
-                    "estado": "Sin solicitudes",
-                    "items": [],
-                    "anexos": []
-                }
+            tabla_gestion = sub_4_4.get("tablaGestionInclusion", {}) if sub_4_4 else {}
             
-            # Asignar datos transformados al generador
-            generador.datos = datos_transformados
-            generador.datos["mes"] = config.MESES[mes]
-            generador.datos["anio"] = anio
+            # tablaGestionInclusion es un objeto, no un array
+            if isinstance(tabla_gestion, list) and len(tabla_gestion) > 0:
+                tabla_gestion = tabla_gestion[0]
+            elif not isinstance(tabla_gestion, dict):
+                tabla_gestion = {}
             
-            logger.info(f"Datos de inventario cargados exitosamente para {anio}-{mes}")
+            items = []
+            if tabla_gestion:
+                items.append({
+                    "descripcion": tabla_gestion.get("descripcion", ""),
+                    "cantidad": tabla_gestion.get("cantidad", 1),
+                    "unidad": tabla_gestion.get("unidad", "UN"),
+                    "valor_unitario": tabla_gestion.get("valor_unitario", tabla_gestion.get("valorUnitario", 0)),
+                    "valor_total": tabla_gestion.get("valor_total", tabla_gestion.get("valorTotal", 0)),
+                    "justificacion": tabla_gestion.get("justificacion", "")
+                })
+            
+            logger.info(f"Sección 4.4 - tablaGestionInclusion: {bool(tabla_gestion)}, items: {len(items)}")
+            
+            content_44 = {
+                "comunicado": {
+                    "numero": tabla_gestion.get("consecutivoETB", ""),
+                    "fecha": tabla_gestion.get("fecha", "")
+                },
+                "items": items,
+                "anexos": sub_4_4.get("anexos", []) if sub_4_4 else []
+            }
+            
+            index.append({
+                "id": "4.4",
+                "level": 2,
+                "title": "4.4 GESTIONES DE INCLUSIÓN A LA BOLSA",
+                "content": content_44
+            })
+            
+            documento = {
+                "anio": anio,
+                "mes": mes,
+                "index": index
+            }
+            
+            logger.info(f"Documento construido exitosamente para {anio}-{mes}")
+            return documento
         
         except Exception as e:
-            logger.error(f"Error al cargar datos desde MongoDB: {e}", exc_info=True)
-            generador.datos = {}
+            logger.error(f"Error al construir documento desde MongoDB: {e}", exc_info=True)
             raise
     
     async def generar_seccion4(
@@ -205,7 +291,7 @@ class Seccion4Service:
         db = None
     ) -> Path:
         """
-        Genera el documento de la sección 4 desde MongoDB
+        Genera el documento de la sección 4 desde MongoDB usando el nuevo generador
         
         Args:
             anio: Año del informe
@@ -219,14 +305,8 @@ class Seccion4Service:
         if db is None:
             raise ValueError("db es requerido para generar la sección 4")
         
-        # Crear generador
-        generador = GeneradorSeccion4(
-            anio=anio,
-            mes=mes
-        )
-        
-        # Cargar datos desde MongoDB
-        await self.cargar_datos_desde_mongodb(anio, mes, generador, db)
+        # Construir documento desde MongoDB
+        document = await self.construir_documento_desde_mongodb(anio, mes, db)
         
         # Determinar ruta de salida
         if output_path is None:
@@ -235,8 +315,9 @@ class Seccion4Service:
         # Asegurar que el directorio existe
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Generar y guardar el documento
-        generador.guardar(output_path)
+        # Crear generador y generar documento
+        generador = GeneradorSeccion4()
+        await generador.generar(document, output_path)
         
         logger.info(f"Sección 4 generada exitosamente en: {output_path}")
         return output_path

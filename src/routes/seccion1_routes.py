@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 from src.controllers.seccion1_controller import Seccion1Controller
 
-router = APIRouter(prefix="/api/seccion1", tags=["seccion1"])
+router = APIRouter(prefix="/seccion1", tags=["seccion1"])
 controller = Seccion1Controller()
 
 

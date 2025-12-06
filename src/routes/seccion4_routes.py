@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from src.controllers.seccion4_controller import Seccion4Controller
 from src.services.database import get_database
 
-router = APIRouter(prefix="/api/seccion4", tags=["seccion4"])
+router = APIRouter(prefix="/seccion4", tags=["seccion4"])
 controller = Seccion4Controller()
 
 
